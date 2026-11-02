@@ -5,6 +5,32 @@ const PBKDF2_ITERATIONS = 310_000;
 const SESSION_COOKIE = "sc_session";
 const SESSION_MAX = 60 * 60 * 24 * 30;
 
+/** Parse both D1 ISO timestamps and SQLite datetime('now') values. */
+export function databaseTimeMs(value: unknown): number | null {
+  if (typeof value !== "string" && typeof value !== "number") return null;
+  const source = typeof value === "number" ? value : value.includes("T") ? value : `${value.replace(" ", "T")}Z`;
+  const parsed = typeof source === "number" ? source : Date.parse(source);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+export interface SessionAuthRow {
+  user_id?: unknown;
+  session_id?: unknown;
+  session_expires_at?: unknown;
+  user_expires_at?: unknown;
+  revoked_at?: unknown;
+}
+
+/** Fail-closed, database-format-independent session predicate. */
+export function isSessionActive(row: SessionAuthRow | null | undefined, atMs = Date.now()): boolean {
+  if (!row || typeof row.user_id !== "string" || !row.user_id || row.revoked_at != null) return false;
+  const sessionExpiry = databaseTimeMs(row.session_expires_at);
+  if (sessionExpiry == null || sessionExpiry <= atMs) return false;
+  if (row.user_expires_at == null) return true;
+  const userExpiry = databaseTimeMs(row.user_expires_at);
+  return userExpiry != null && userExpiry > atMs;
+}
+
 const b64 = (a: Uint8Array) => base64url(a);
 const fromB64 = (s: string) => {
   const normalized = s.replace(/-/g, "+").replace(/_/g, "/");
@@ -72,18 +98,40 @@ export async function createSession(env: Env, userId: string, temporary: boolean
 export async function authenticate(request: Request, env: Env) {
   const token = getCookie(request, SESSION_COOKIE);
   if (!token) return null;
-  return env.DB.prepare(`
-    SELECT u.*, s.id AS session_id
-    FROM sessions s JOIN users u ON u.id=s.user_id
-    WHERE s.token_hash=?1 AND s.revoked_at IS NULL
-      AND julianday(s.expires_at) > julianday('now')
-      AND (u.expires_at IS NULL OR julianday(u.expires_at) > julianday('now'))
-  `).bind(await hashToken(token)).first<any>();
+  try {
+    return await env.DB.prepare(`
+      SELECT u.*, s.id AS session_id
+      FROM sessions s JOIN users u ON u.id=s.user_id
+      WHERE s.token_hash=?1 AND s.revoked_at IS NULL
+        AND julianday(s.expires_at) > julianday('now')
+        AND (u.expires_at IS NULL OR julianday(u.expires_at) > julianday('now'))
+    `).bind(await hashToken(token)).first<any>();
+  } catch {
+    return null;
+  }
 }
 
 export async function revokeSession(request: Request, env: Env) {
   const token = getCookie(request, SESSION_COOKIE);
-  if (token) await env.DB.prepare("DELETE FROM sessions WHERE token_hash=?1").bind(await hashToken(token)).run();
+  if (!token) return;
+  const tokenHash = await hashToken(token);
+  // D1 lookup and deletion are authoritative: never report logout success when either fails.
+  const session = await env.DB.prepare("SELECT id, user_id FROM sessions WHERE token_hash=?1").bind(tokenHash).first<{ id: string; user_id: string }>();
+  await env.DB.prepare("DELETE FROM sessions WHERE token_hash=?1").bind(tokenHash).run();
+  // Presence notification is only an optimization; the signaling path revalidates from D1.
+  if (session?.id && session.user_id && env.SPARKCALL_INTERNAL_TOKEN !== undefined && env.PRESENCE) {
+    try {
+      const stub = env.PRESENCE.get(env.PRESENCE.idFromName(session.user_id));
+      await stub.fetch("https://presence/session-revoked", {
+        method: "POST",
+        headers: {
+          "X-SparkCall-Internal-Token": env.SPARKCALL_INTERNAL_TOKEN,
+          "X-SparkCall-User-ID": session.user_id,
+          "X-SparkCall-Session-ID": session.id,
+        },
+      });
+    } catch { /* notification is best effort; D1 deletion already succeeded */ }
+  }
 }
 
 export async function requireAuth(request: Request, env: Env) {

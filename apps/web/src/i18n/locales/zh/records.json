@@ -1,0 +1,19 @@
+{
+  "eyebrow": "私密工作区",
+  "title": "通话记录",
+  "detail": "创建通话的私密摘要。记录不会包含音频，公开分享也会保持关闭，直到你明确启用。",
+  "actions": { "closeForm": "关闭表单", "newRecord": "新建记录", "creating": "创建中…", "createPrivate": "创建私密记录", "close": "关闭", "edit": "编辑", "copied": "已复制", "copyLink": "复制链接", "deleteAria": "删除记录", "save": "保存更改", "saving": "保存中…", "viewPublic": "查看公开页面" },
+  "security": { "ownerNote": "只有已登录的所有者可以管理这些记录。临时账户可能还会获得安全且绑定当前浏览器的恢复能力；它不会显示在页面上，也不会包含在记录 URL 中。" },
+  "create": { "title": "创建私密通话记录", "detail": "记录会以私密状态开始。是否以及何时公开，由你决定。", "privacyNote": "不要填写账户邮箱、凭据或私密会话数据。记录永远不会存储通话音频。", "capabilityNote": "如果此临时会话符合条件，管理恢复能力会保存在安全的 HttpOnly 浏览器 Cookie 中，不会出现在页面或公开链接里。" },
+  "fields": { "slug": "公开 URL slug", "title": "标题", "associatedCall": "关联通话（可选）", "description": "描述", "notes": "备注", "tags": "标签（用逗号分隔）", "expiration": "过期时间（可选）", "participants": "参与者显示名称（每行一个）", "metadata": "自定义元数据（JSON 对象）" },
+  "placeholders": { "slug": "project-meeting", "title": "项目同步", "tags": "规划, 项目", "participants": "除非你在下方确认同意，否则不会添加名称。" },
+  "options": { "noLinkedCall": "不关联通话", "incoming": "呼入", "outgoing": "呼出" },
+  "consent": { "create": "如果之后公开此记录，我确认已获得包含这些显示名称的适当同意。没有同意时，不会存储名称。", "publicActive": "公开链接已启用", "keepPrivate": "保持此记录私密", "publicWarning": "公开后，此记录及参与者信息会通过公开 URL 可见。保存前请确认参与者同意。", "privateNote": "在你明确公开前，此记录会保持私密。" },
+  "status": { "public": "公开", "private": "私密", "expired": "已过期" },
+  "record": { "updated": "更新于 {{date}}", "noDescription": "暂无描述", "duration": "通话时长：{{duration}}", "participants": "{{count}} 位参与者", "expires": "过期时间：{{date}}" },
+  "states": { "loading": "正在加载通话记录…" },
+  "empty": { "title": "暂无通话记录", "detail": "创建一份私密摘要；是否以及何时公开，由你决定。" },
+  "notices": { "created": "私密记录已创建。公开操作需要明确执行。", "createdWithRecovery": "私密记录已创建。独立的恢复凭据已保存在此浏览器中，即使临时会话过期，你仍可管理记录。" },
+  "errors": { "invalidMetadata": "自定义元数据必须是有效 JSON。", "createFailed": "无法创建记录", "loadFailed": "无法加载记录", "saveFailed": "无法保存记录", "deleteFailed": "无法删除记录", "copyFailed": "无法复制公开链接" },
+  "confirm": { "publish": "要公开此记录吗？确认后，其内容和参与者信息会通过公开 URL 可见。", "delete": "确定删除 {{title}} 吗？此操作无法撤销。" }
+}

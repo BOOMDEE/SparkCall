@@ -1,10 +1,14 @@
 import { useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, Phone } from "lucide-react";
+import { ArrowLeft, ArrowRight, Phone } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { api, type Me } from "../lib/api";
-import { Button, Card, Field, Notice } from "../components/ui";
+import { LanguageSwitcher } from "../components/LanguageSwitcher";
+import { SiteFooter } from "../components/SiteFooter";
+import { Button, Field, Notice } from "../components/ui";
 
 export default function AuthPage({ mode }: { mode: "login" | "register" }) {
+  const { t } = useTranslation("auth");
   const location = useLocation();
   const navigate = useNavigate();
   const params = new URLSearchParams(location.search);
@@ -16,35 +20,121 @@ export default function AuthPage({ mode }: { mode: "login" | "register" }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isLogin = mode === "login";
+  const copy = isLogin ? "login" : "register";
 
   async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setBusy(true); setError(null);
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
     try {
       await api<Me>(`/api/auth/${mode}`, {
         method: "POST",
         body: JSON.stringify({ username, password, ...(isLogin ? {} : { displayName: displayName || username }) }),
       });
       navigate(destination, { replace: true });
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Authentication failed."); setBusy(false); }
+    } catch (cause) {
+      const detail = cause instanceof Error && cause.message ? cause.message : t("errors.unknown");
+      setError(t(`errors.${isLogin ? "login" : "register"}`, {
+        detail: t("errors.serverContext", { detail }),
+      }));
+      setBusy(false);
+    }
   }
 
-  return <main className="grid min-h-screen place-items-center bg-white px-4 py-10 text-neutral-900 dark:bg-black dark:text-neutral-100">
-    <div className="w-full max-w-md">
-      <Link to="/" className="mb-7 inline-flex items-center gap-2 text-sm text-neutral-500 hover:text-neutral-900 dark:hover:text-white"><ArrowLeft size={15} /> Back to SparkCall</Link>
-      <Card className="p-6 sm:p-8">
-        <Link to="/" className="flex items-center gap-2 text-sm font-semibold"><span className="grid h-6 w-6 place-items-center rounded bg-neutral-900 text-white dark:bg-white dark:text-black"><Phone size={13} fill="currentColor" /></span>SparkCall</Link>
-        <h1 className="mt-6 text-xl font-semibold">{isLogin ? "Sign in" : "Create your account"}</h1>
-        <p className="mt-2 text-sm text-neutral-500">{isLogin ? "Use your SparkCall username and password." : "Choose a username and a strong password."}</p>
-        {error && <div className="mt-5"><Notice>{error}</Notice></div>}
-        <form onSubmit={(event) => void submit(event)} className="mt-6 space-y-4">
-          <Field label="Username" autoComplete="username" required minLength={3} maxLength={32} value={username} onChange={(event) => setUsername(event.target.value)} />
-          {!isLogin && <Field label="Display name" autoComplete="nickname" maxLength={80} value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="How others will see you" />}
-          <Field label="Password" type="password" autoComplete={isLogin ? "current-password" : "new-password"} required minLength={isLogin ? 1 : 12} maxLength={200} value={password} onChange={(event) => setPassword(event.target.value)} />
-          {!isLogin && <p className="-mt-2 text-xs text-neutral-500">At least 12 characters. Passwords are stored only as a salted hash.</p>}
-          <Button type="submit" disabled={busy} className="w-full">{busy ? "Please wait…" : isLogin ? "Sign in" : "Create account"}</Button>
-        </form>
-        <div className="mt-5 text-center text-sm text-neutral-500">{isLogin ? "New to SparkCall?" : "Already have an account?"} <Link className="font-medium text-neutral-900 underline underline-offset-4 dark:text-white" to={isLogin ? "/register" : "/login"}>{isLogin ? "Create an account" : "Sign in"}</Link></div>
-      </Card>
-    </div>
-  </main>;
+  return (
+    <main className="flex min-h-screen flex-col bg-white text-neutral-950 dark:bg-black dark:text-neutral-100">
+      <header className="border-b border-neutral-200 dark:border-neutral-800">
+        <div className="mx-auto flex h-14 w-full max-w-[1200px] items-center justify-between px-4 sm:px-6">
+          <Link to="/" aria-label={t("brand.homeLabel")} className="flex items-center gap-2 text-sm font-semibold tracking-tight">
+            <span aria-hidden="true" className="grid h-6 w-6 place-items-center rounded-md bg-neutral-900 text-white dark:bg-white dark:text-black">
+              <Phone size={13} fill="currentColor" strokeWidth={1.8} />
+            </span>
+            SparkCall
+          </Link>
+          <LanguageSwitcher />
+        </div>
+      </header>
+
+      <div className="flex flex-1 items-center px-4 py-10 sm:px-6 sm:py-14">
+        <div className="mx-auto grid w-full max-w-[960px] gap-10 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-center lg:gap-24">
+          <section className="max-w-xl">
+            <Link to="/" className="inline-flex items-center gap-2 text-sm text-neutral-500 transition-colors hover:text-neutral-950 dark:hover:text-white">
+              <ArrowLeft size={15} aria-hidden="true" />
+              {t("navigation.backToSparkCall")}
+            </Link>
+            <p className="mt-10 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-neutral-500">
+              <span aria-hidden="true" className="h-px w-6 bg-neutral-400 dark:bg-neutral-600" />
+              {t("eyebrow")}
+            </p>
+            <h1 className="mt-5 text-3xl font-semibold tracking-[-0.04em] sm:text-4xl">{t(`${copy}.title`)}</h1>
+            <p className="mt-3 max-w-md text-sm leading-6 text-neutral-500 dark:text-neutral-400">{t(`${copy}.detail`)}</p>
+
+            <section className="mt-8 rounded-md border border-neutral-200 p-5 dark:border-neutral-800 sm:p-6" aria-labelledby="auth-form-title">
+              <h2 id="auth-form-title" className="sr-only">{t(`${copy}.title`)}</h2>
+              {error && <div className="mb-5"><Notice>{error}</Notice></div>}
+              <form onSubmit={(event) => void submit(event)} className="space-y-4">
+                <Field
+                  label={t("fields.username")}
+                  aria-label={t("fields.username")}
+                  placeholder={t("fields.usernamePlaceholder")}
+                  autoComplete="username"
+                  required
+                  minLength={3}
+                  maxLength={32}
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value)}
+                />
+                {!isLogin && (
+                  <Field
+                    label={t("fields.displayName")}
+                    aria-label={t("fields.displayName")}
+                    autoComplete="nickname"
+                    maxLength={80}
+                    value={displayName}
+                    onChange={(event) => setDisplayName(event.target.value)}
+                    placeholder={t("fields.displayNamePlaceholder")}
+                  />
+                )}
+                <Field
+                  label={t("fields.password")}
+                  aria-label={t("fields.password")}
+                  placeholder={t("fields.passwordPlaceholder")}
+                  type="password"
+                  autoComplete={isLogin ? "current-password" : "new-password"}
+                  required
+                  minLength={isLogin ? 1 : 12}
+                  maxLength={200}
+                  value={password}
+                  aria-describedby={!isLogin ? "password-hint" : undefined}
+                  onChange={(event) => setPassword(event.target.value)}
+                />
+                {!isLogin && <p id="password-hint" className="-mt-2 text-xs leading-5 text-neutral-500">{t("fields.passwordHint")}</p>}
+                <Button type="submit" disabled={busy} className="w-full">
+                  {busy ? t("actions.waiting") : t(`${copy}.submit`)}
+                  {!busy && <ArrowRight size={15} aria-hidden="true" />}
+                </Button>
+              </form>
+              <p className="mt-5 border-t border-neutral-200 pt-5 text-center text-sm text-neutral-500 dark:border-neutral-800">
+                {t(`${copy}.switchPrompt`)}{" "}
+                <Link className="font-medium text-neutral-950 underline underline-offset-4 hover:no-underline dark:text-white" to={isLogin ? "/register" : "/login"} aria-label={t(`${copy}.switchLabel`)}>
+                  {t(`${copy}.switchAction`)}
+                </Link>
+              </p>
+            </section>
+          </section>
+
+          <aside className="border-t border-neutral-200 pt-5 dark:border-neutral-800 lg:border-l lg:border-t-0 lg:pl-8" aria-labelledby="temporary-title">
+            <h2 id="temporary-title" className="text-sm font-medium">{t("temporary.title")}</h2>
+            <p className="mt-2 text-sm leading-6 text-neutral-500 dark:text-neutral-400">{t("temporary.detail")}</p>
+            <Link to="/" className="mt-5 inline-flex items-center gap-2 text-sm font-medium text-neutral-950 underline underline-offset-4 hover:no-underline dark:text-white" aria-label={t("temporary.action")}>
+              {t("actions.tryTemporary")}
+              <ArrowRight size={15} aria-hidden="true" />
+            </Link>
+          </aside>
+        </div>
+      </div>
+
+      <SiteFooter />
+    </main>
+  );
 }

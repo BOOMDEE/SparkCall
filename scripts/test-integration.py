@@ -18,6 +18,8 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
+import hashlib
+from websocket_client import LocalWebSocket
 
 ROOT = Path(__file__).resolve().parents[1]
 WRANGLER = ROOT / "node_modules/.bin/wrangler"
@@ -30,9 +32,13 @@ class Client:
         self.origin = origin
         self.cookies: dict[str, str] = {}
 
-    def request(self, method: str, path: str, data=None, status=200, origin=None):
+    def request(self, method: str, path: str, data=None, status=200, origin=None, omit_origin=False):
         global CHECKS
-        headers = {"Origin": origin or self.origin}
+        headers = {"Origin": origin or self.origin, "Accept": "application/json" if path.startswith("/api/") else "text/html"}
+        if omit_origin:
+            headers.pop("Origin")
+        if not path.startswith("/api/") and method == "GET":
+            headers["Sec-Fetch-Mode"] = "navigate"
         if self.cookies:
             headers["Cookie"] = "; ".join(f"{k}={v}" for k, v in self.cookies.items())
         payload = None if data is None else json.dumps(data).encode()
@@ -44,7 +50,8 @@ class Client:
         except urllib.error.HTTPError as error:
             response = error
         content = response.read().decode()
-        assert response.status == status, f"{method} {path}: expected {status}, got {response.status}: {content[:300]}"
+        expected = status if isinstance(status, tuple) else (status,)
+        assert response.status in expected, f"{method} {path}: expected {status}, got {response.status}: {content[:300]}"
         for line in response.headers.get_all("Set-Cookie", []):
             parsed = http.cookies.SimpleCookie()
             parsed.load(line)
@@ -56,6 +63,58 @@ class Client:
         CHECKS += 1
         value = json.loads(content) if "application/json" in response.headers.get("Content-Type", "") else content
         return value, response.headers
+
+
+def test_websocket_sessions(origin, alice, bob, local_sql):
+    sockets = []
+
+    def connect(client, path):
+        socket = LocalWebSocket(client, path)
+        sockets.append(socket)
+        return socket
+
+    try:
+        print("Testing live local WebSocket revocation and expiry...", flush=True)
+        bob.request("PATCH", "/api/settings/preferences", {"allowIncoming": True})
+        secondary = Client(origin)
+        secondary.request("POST", "/api/auth/login", {"username": "alice", "password": PASSWORD})
+        primary_presence = connect(alice, "/api/presence")
+        secondary_presence = connect(secondary, "/api/presence")
+        data, _ = alice.request("POST", "/api/calls", {"number": "casenumber"}, status=201)
+        call_id = data["callId"]
+        primary_signal = connect(alice, f"/api/calls/{call_id}/signaling")
+        primary_signal.expect("call-state")
+        alice.request("POST", "/api/auth/logout", {})
+        primary_presence.expect_invalid()
+        primary_signal.expect_invalid()
+        secondary_presence.send_json({"type": "ping"})
+        secondary_presence.expect("pong")
+        secondary.request("POST", f"/api/calls/{call_id}/cancel", {})
+
+        # The alarm must close an idle socket without waiting for another ping.
+        secondary_presence.close()
+        data, _ = secondary.request("POST", "/api/calls", {"number": "casenumber"}, status=201)
+        call_id = data["callId"]
+        token_hash = hashlib.sha256(secondary.cookies["sc_session"].encode()).hexdigest()
+        local_sql(f"UPDATE sessions SET expires_at=strftime('%Y-%m-%dT%H:%M:%fZ','now','+4 seconds') WHERE token_hash='{token_hash}'")
+        expiry_presence = connect(secondary, "/api/presence")
+        expiry_signal = connect(secondary, f"/api/calls/{call_id}/signaling")
+        expiry_signal.expect("call-state")
+        expiry_presence.expect_invalid()
+        expiry_signal.expect_invalid()
+        secondary.request("GET", "/api/me", status=401)
+
+        guest = Client(origin)
+        data, _ = guest.request("POST", "/api/auth/guest", {}, status=201)
+        user_id = data["user"]["id"]
+        local_sql(f"UPDATE users SET expires_at=strftime('%Y-%m-%dT%H:%M:%fZ','now','+4 seconds') WHERE id='{user_id}'")
+        guest_presence = connect(guest, "/api/presence")
+        guest_presence.expect_invalid()
+        guest.request("GET", "/api/me", status=401)
+        print("PASS: live socket logout, session expiry, temporary-user expiry and same-user session isolation.", flush=True)
+    finally:
+        for socket in sockets:
+            socket.close()
 
 
 def run():
@@ -73,7 +132,7 @@ def run():
             "name": "sparkcall-integration",
             "main": str(ROOT / "workers/api/src/index.ts"),
             "compatibility_date": "2026-11-02",
-            "assets": {"directory": str(ROOT / "apps/web/dist"), "binding": "ASSETS", "not_found_handling": "single-page-application", "run_worker_first": ["/api/*"]},
+            "assets": {"directory": str(ROOT / "apps/web/dist"), "binding": "ASSETS", "not_found_handling": "single-page-application", "run_worker_first": ["/api/*", "/callrecords", "/callrecords/*"]},
             "d1_databases": [{"binding": "DB", "database_name": "sparkcall-integration", "database_id": "00000000-0000-0000-0000-000000000000", "migrations_dir": str(ROOT / "migrations")}],
             "durable_objects": {"bindings": [{"name": "SIGNALING", "class_name": "SparkCallDurableObject"}, {"name": "PRESENCE", "class_name": "SparkCallPresenceObject"}]},
             "exports": {"SparkCallDurableObject": {"type": "durable-object", "storage": "sqlite"}, "SparkCallPresenceObject": {"type": "durable-object", "storage": "sqlite"}},
@@ -107,10 +166,14 @@ def run():
             print("Testing real local HTTP routes...", flush=True)
             anonymous, alice, bob, guest = [Client(origin) for _ in range(4)]
             anonymous.request("GET", "/")
+            html, headers = anonymous.request("GET", "/callrecords/private-meeting")
+            assert "<!doctype html>" in html.lower(), f"Expected SPA HTML, received {html[:150]!r}"
+            assert headers.get("X-Robots-Tag") == "noindex, nofollow"
             data, _ = anonymous.request("GET", "/api/session")
             assert data["authenticated"] is False
             anonymous.request("GET", "/api/me", status=401)
             anonymous.request("POST", "/api/auth/guest", {}, status=403, origin="https://attacker.invalid")
+            anonymous.request("POST", "/api/auth/guest", {}, status=403, omit_origin=True)
             anonymous.request("POST", "/api/calls", {"number": "Nobody"}, status=403, origin="https://attacker.invalid")
             ids = []
             for client in (alice, bob, guest):
@@ -128,6 +191,11 @@ def run():
             assert data["available"] is False
             data, _ = anonymous.request("GET", "/api/numbers/availability?number=CASENUMBER")
             assert data["available"] is True
+            local_sql("INSERT INTO reserved_numbers(number) VALUES('LaunchOnly')")
+            data, _ = anonymous.request("GET", "/api/numbers/availability?number=launchonly")
+            assert data["available"] is False
+            data, _ = alice.request("POST", "/api/numbers", {"number": "launchonly"}, status=400)
+            assert data["error"]["code"] == "NUMBER_RESERVED"
             alice.request("POST", "/api/numbers", {"number": "OtherNumber"}, status=429)
             alice.request("POST", "/api/contacts", {"number": "casenumber", "name": "Bob", "favorite": True}, status=201)
             data, _ = alice.request("GET", "/api/contacts?q=Bob")
@@ -190,6 +258,16 @@ def run():
             alice.request("POST", "/api/auth/login", {"username": "alice", "password": "incorrect"}, status=401)
             data, _ = alice.request("POST", "/api/auth/login", {"username": "ALICE", "password": PASSWORD})
             assert data["user"]["id"] == ids[0]
+            test_websocket_sessions(origin, alice, bob, local_sql)
+            alice.request("POST", "/api/auth/login", {"username": "alice", "password": PASSWORD})
+            # A user cannot evade the limit by calling nonexistent numbers.
+            limited = False
+            for _ in range(11):
+                data, _ = alice.request("POST", "/api/calls", {"number": "NoSuchSparkCallNumber"}, status=(404, 429))
+                if data["error"]["code"] == "RATE_LIMITED":
+                    limited = True
+                    break
+            assert limited, "Repeated call creation must be rate-limited"
             print(f"PASS: {CHECKS} HTTP assertions, isolated migrations, ownership and expiry regressions.", flush=True)
         finally:
             try:

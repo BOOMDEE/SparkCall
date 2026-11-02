@@ -1,0 +1,81 @@
+{
+  "eyebrow": "浏览器通话",
+  "title": "拨号台",
+  "detail": "使用 SparkCall 号码发起私密浏览器通话。仅在需要音频时请求麦克风权限。",
+  "sections": {
+    "placeCall": "发起通话",
+    "currentCall": "当前通话",
+    "callStatus": "通话状态"
+  },
+  "form": {
+    "prompt": "你要呼叫谁？",
+    "numberLabel": "SparkCall 号码",
+    "numberPlaceholder": "例如：SC888",
+    "numberHint": "号码区分大小写。请输入对方准确的 SparkCall 号码。",
+    "privacyNote": "音频通过加密 WebRTC 保持在通话双方之间。",
+    "call": "呼叫",
+    "connecting": "正在连接…"
+  },
+  "identity": {
+    "incomingCaller": "来电方",
+    "outgoingCall": "呼出通话",
+    "incomingCall": "来电通话"
+  },
+  "states": {
+    "idle": "可以呼叫",
+    "calling": "正在呼叫…",
+    "ringing": "正在响铃…",
+    "connecting": "正在建立安全音频…",
+    "connected": "已接通",
+    "ended": "通话已结束",
+    "rejected": "通话已拒绝",
+    "busy": "对方正忙",
+    "timeout": "通话超时",
+    "failed": "通话失败",
+    "cancelled": "通话已取消"
+  },
+  "actions": {
+    "mute": "静音",
+    "unmute": "取消静音",
+    "cancel": "取消",
+    "hangUp": "挂断",
+    "refreshDevices": "刷新设备"
+  },
+  "audio": {
+    "title": "音频设备",
+    "detail": "选择本次浏览器通话使用的麦克风和扬声器。",
+    "microphone": "麦克风",
+    "speaker": "扬声器",
+    "systemDefault": "系统默认",
+    "microphoneOption": "麦克风",
+    "speakerOption": "扬声器",
+    "supportNote": "扬声器选择取决于浏览器支持。码率是目标值，网络和编解码器行为可能导致实际码率变化。"
+  },
+  "status": {
+    "eyebrow": "实时详情",
+    "presence": "在线状态",
+    "state": "通话状态",
+    "connection": "WebRTC 连接",
+    "duration": "时长",
+    "online": "已连接",
+    "offline": "正在重连",
+    "connectionStates": {
+      "new": "新建",
+      "connecting": "连接中",
+      "connected": "已连接",
+      "disconnected": "已断开",
+      "failed": "失败",
+      "closed": "已关闭"
+    },
+    "webrtcNote": "通话使用 WebRTC。Cloudflare TURN 凭据由服务器获取，不会暴露为长期账号凭据。",
+    "failureHint": "如果连接失败，请确认此部署已配置 TURN 凭据，然后重试。"
+  },
+  "errors": {
+    "missingNumber": "请输入 SparkCall 号码后再呼叫。",
+    "callFailed": "无法发起通话。{{detail}}",
+    "audioDevicesFailed": "无法访问音频设备。{{detail}}",
+    "microphoneFailed": "无法切换麦克风。{{detail}}",
+    "speakerFailed": "此浏览器不支持选择扬声器。{{detail}}",
+    "session": "通话服务错误。{{detail}}"
+  }
+}

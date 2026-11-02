@@ -9,3 +9,5 @@ node_modules/
 *.tsbuildinfo
 coverage/
 .DS_Store
+__pycache__/
+*.py[cod]

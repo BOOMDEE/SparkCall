@@ -1,0 +1,15 @@
+{
+  "brand": { "name": "SparkCall", "homeLabel": "SparkCall home" },
+  "navigation": { "label": "Main navigation", "overview": "Overview", "dialer": "Dialer", "contacts": "Contacts", "history": "History", "records": "Call records", "blocked": "Blocked", "settings": "Settings" },
+  "actions": { "openNavigation": "Open navigation", "closeNavigation": "Close navigation", "switchToLight": "Switch to light mode", "switchToDark": "Switch to dark mode", "signOut": "Sign out", "openDialer": "Open dialer", "dismissError": "Dismiss error" },
+  "status": { "online": "Online", "offline": "Offline", "workspace": "Workspace" },
+  "identity": { "noNumber": "No number claimed", "temporary": "Temporary account", "permanent": "SparkCall identity", "expires": "Expires {{date}}" },
+  "call": { "controls": "Active call controls", "incomingCaller": "Incoming caller", "outgoing": "Outgoing call", "mute": "Mute call", "unmute": "Unmute call", "cancel": "Cancel call", "hangUp": "Hang up call", "states": { "RINGING": "Ringing", "CONNECTING": "Connecting", "CONNECTED": "Connected", "ENDING": "Ending", "IDLE": "Idle", "ENDED": "Ended", "REJECTED": "Rejected", "BUSY": "Busy", "TIMEOUT": "Timed out", "FAILED": "Failed", "CANCELLED": "Cancelled" } },
+  "errors": { "session": "Call session error: {{detail}}" },
+  "notFound": { "eyebrow": "404 · Not found", "title": "This page doesn’t exist.", "detail": "Check the address or return to SparkCall.", "home": "Home" },
+  "footer": { "attribution": "Design with ❤️ by @BOOMDEE", "license": "SparkCall · Open source under Apache-2.0" },
+  "loading": "Loading workspace…",
+  "languageLabel": "Language",
+  "resource": { "loading": "Loading…", "emptyTitle": "Nothing here yet", "emptyDetail": "Data will appear once there is activity." },
+  "authPrompt": { "notAuthenticated": "Your session is not authenticated.", "signIn": "Sign in" }
+}

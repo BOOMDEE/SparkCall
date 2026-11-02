@@ -36,7 +36,7 @@ function withSecurity(response: Response, request: Request, env: Env) {
 
 function csrf(request: Request, env: Env) {
   const origin = request.headers.get("Origin");
-  if (!origin) return true;
+  if (!origin) return false;
   try { return origin === (env.ALLOWED_ORIGIN || new URL(request.url).origin); } catch { return false; }
 }
 
@@ -524,6 +524,8 @@ async function route(request: Request, env: Env): Promise<Response> {
     const input = await body(request);
     const number = text(input.number, 32)?.trim();
     if (!number || !validNumber(number) || isReserved(number)) return error("Number is invalid or reserved");
+    const reserved = await env.DB.prepare("SELECT 1 FROM reserved_numbers WHERE number=?1 COLLATE NOCASE LIMIT 1").bind(number).first();
+    if (reserved) return error("Number is invalid or reserved", 400, "NUMBER_RESERVED");
     if (user.number === number) return json({ number });
     const previousChange = user.number_changed_at ? Date.parse(user.number_changed_at) : 0;
     if (previousChange && Date.now() - previousChange < 30 * 24 * 60 * 60 * 1000) return error("A number can be changed once every 30 days", 429, "NUMBER_CHANGE_COOLDOWN");

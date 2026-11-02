@@ -1,0 +1,36 @@
+{
+  "eyebrow": "隐私控制",
+  "title": "已封锁的用户",
+  "description": "管理无法与你建立通话的号码。封锁规则由服务端双向执行。",
+  "form": {
+    "title": "封锁号码",
+    "detail": "输入 SparkCall 号码，阻止你与该用户之间的后续通话。",
+    "label": "SparkCall 号码",
+    "placeholder": "要封锁的号码",
+    "submit": "封锁号码",
+    "submitting": "封锁中…"
+  },
+  "list": {
+    "title": "已封锁号码",
+    "count": "已封锁 {{count}} 个",
+    "blockedOn": "封锁于 {{date}}",
+    "unblock": "解除封锁",
+    "unblocking": "解除中…",
+    "unblockLabel": "解除封锁：{{name}}"
+  },
+  "empty": {
+    "title": "暂无已封锁用户",
+    "detail": "你封锁的号码会显示在这里。"
+  },
+  "states": {
+    "loading": "正在加载已封锁用户…",
+    "loadError": "无法加载已封锁用户。"
+  },
+  "notices": {
+    "security": "已封锁用户无法与你建立双向通话。此规则由服务端执行。",
+    "blocked": "用户已封锁。后续通话将由服务端拒绝。",
+    "unblocked": "用户已解除封锁。",
+    "blockFallback": "无法封锁此号码。",
+    "unblockFallback": "无法解除该用户的封锁。"
+  }
+}

@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const requireAuth = vi.fn();
+const rateLimit = vi.fn();
 const findByNumber = vi.fn();
 const isBlocked = vi.fn();
 
-vi.mock("./auth", () => ({ requireAuth }));
+vi.mock("./auth", () => ({ requireAuth, rateLimit }));
 vi.mock("./database", () => ({
   body: async (request: Request) => JSON.parse(await request.text()) as Record<string, unknown>,
   error: (message: string, status = 400, code = "BAD_REQUEST") =>
@@ -41,12 +42,27 @@ function env(db: { prepare: ReturnType<typeof vi.fn> }, presence = namespace()) 
 
 beforeEach(() => {
   vi.clearAllMocks();
+  rateLimit.mockReset().mockResolvedValue(true);
   requireAuth.mockResolvedValue({ id: "caller", number: "SC-CALLER", display_name: "Caller", session_id: "session" });
   findByNumber.mockResolvedValue({ id: "callee", number: "SC-CALLEE", display_name: "Callee" });
   isBlocked.mockResolvedValue(false);
 });
 
 describe("realtime call authorization and activity checks", () => {
+  it.each(["account", "network"])("rejects %s call floods before looking up a recipient", async (kind) => {
+    if (kind === "account") rateLimit.mockResolvedValue(false);
+    else rateLimit.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    const response = await handleRealtimeApi(new Request("https://app.example/api/calls", {
+      method: "POST",
+      headers: { Origin: "https://app.example", "Content-Type": "application/json", "CF-Connecting-IP": "192.0.2.4" },
+      body: JSON.stringify({ number: "SC-CALLEE" }),
+    }), env({ prepare: vi.fn() }));
+    expect(response?.status).toBe(429);
+    expect(findByNumber).not.toHaveBeenCalled();
+    expect(rateLimit).toHaveBeenCalledWith(expect.anything(), "calls:user:caller", 10, 60);
+    if (kind === "network") expect(rateLimit).toHaveBeenCalledWith(expect.anything(), "calls:ip:192.0.2.4", 60, 60);
+  });
+
   it("rejects cross-site call creation before authenticating or notifying anyone", async () => {
     const request = new Request("https://app.example/api/calls", {
       method: "POST",
@@ -57,6 +73,18 @@ describe("realtime call authorization and activity checks", () => {
 
     expect(response?.status).toBe(403);
     await expect(response?.json()).resolves.toEqual({ error: { code: "CSRF", message: "Cross-site request rejected" } });
+    expect(requireAuth).not.toHaveBeenCalled();
+  });
+
+  it("rejects call creation when the Origin header is absent", async () => {
+    const request = new Request("https://app.example/api/calls", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ number: "SC-CALLEE" }),
+    });
+    const response = await handleRealtimeApi(request, env({ prepare: vi.fn() }));
+
+    expect(response?.status).toBe(403);
     expect(requireAuth).not.toHaveBeenCalled();
   });
 

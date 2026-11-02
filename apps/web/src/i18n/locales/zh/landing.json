@@ -1,0 +1,33 @@
+{
+  "brand": {
+    "homeLabel": "SparkCall 首页"
+  },
+  "navigation": {
+    "label": "主导航",
+    "signIn": "登录",
+    "createAccount": "创建账号"
+  },
+  "eyebrow": "浏览器语音通话",
+  "title": "直接从浏览器开始通话。",
+  "description": "SparkCall 提供基于浏览器的通话入口，让你使用 SparkCall 号码、联系联系人并管理语音通话，无需安装原生应用。",
+  "actions": {
+    "createAccount": "创建账号",
+    "temporaryAccount": "试用临时账号",
+    "starting": "正在启动…"
+  },
+  "details": {
+    "label": "开始前须知",
+    "browser": {
+      "title": "WebRTC 音频",
+      "detail": "通话使用浏览器麦克风和 WebRTC。根据网络连接情况，音频可能会使用已配置的 TURN 中继。"
+    },
+    "temporary": {
+      "title": "临时访问",
+      "detail": "临时身份将在 24 小时后过期。通话需要麦克风权限和可用的通话配置。"
+    }
+  },
+  "errors": {
+    "temporaryAccount": "无法创建临时会话。{{detail}}",
+    "unknown": "请重试。"
+  }
+}

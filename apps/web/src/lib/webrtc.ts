@@ -77,6 +77,7 @@ export class CallController {
   private presenceHeartbeat?: number;
   private durationTimer?: number;
   private presenceStopped = false;
+  private sessionInvalid = false;
   private pendingCandidates: RTCIceCandidateInit[] = [];
   private audio: AudioOptions;
 
@@ -89,6 +90,7 @@ export class CallController {
   get presenceConnected(): boolean { return this.presenceSocket?.readyState === WebSocket.OPEN; }
 
   async connectPresence(): Promise<void> {
+    if (this.sessionInvalid) throw new Error("Your session ended. Sign in again.");
     this.presenceStopped = false;
     if (this.presenceConnected) return;
     await this.openPresenceSocket();
@@ -97,21 +99,21 @@ export class CallController {
   async updateAudioOptions(options: AudioOptions): Promise<void> {
     const previous = this.audio;
     this.audio = { ...this.audio, ...options };
+    if (options.audioOutputDeviceId !== undefined && options.audioOutputDeviceId !== previous.audioOutputDeviceId && this.remoteAudio) {
+      await this.applyAudioOutputPreference();
+    }
     if (this.peer) {
       const captureChanged = (options.audioInputDeviceId !== undefined && options.audioInputDeviceId !== previous.audioInputDeviceId)
         || (options.echoCancellation !== undefined && options.echoCancellation !== previous.echoCancellation)
         || (options.noiseSuppression !== undefined && options.noiseSuppression !== previous.noiseSuppression)
         || (options.autoGainControl !== undefined && options.autoGainControl !== previous.autoGainControl);
       if (captureChanged) await this.setAudioInput(this.audio.audioInputDeviceId ?? "");
-      if (options.audioOutputDeviceId !== undefined && options.audioOutputDeviceId !== previous.audioOutputDeviceId && this.remoteAudio) {
-        const output = this.remoteAudio as HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> };
-        if (output.setSinkId) await output.setSinkId(this.audio.audioOutputDeviceId ?? "");
-      }
       await this.applyBitrate();
     }
   }
 
   async startOutgoing(callId: string, calleeId: string): Promise<void> {
+    if (this.sessionInvalid) throw new Error("Your session ended. Sign in again.");
     if (!callId || !calleeId) throw new Error("The call request did not return a call ID and recipient.");
     this.prepareForNewCall();
     if (this.state !== "IDLE") throw new Error("A call is already active.");
@@ -136,6 +138,8 @@ export class CallController {
   }
 
   async acceptIncoming(callId: string): Promise<void> {
+    if (this.sessionInvalid) throw new Error("Your session ended. Sign in again.");
+    this.prepareForNewCall();
     if (this.state !== "IDLE") throw new Error("You are already in a call.");
     const generation = ++this.generation;
     this.id = callId;
@@ -161,6 +165,8 @@ export class CallController {
   }
 
   async rejectIncoming(callId: string): Promise<void> {
+    if (this.sessionInvalid) throw new Error("Your session ended. Sign in again.");
+    this.prepareForNewCall();
     if (this.state !== "IDLE") throw new Error("You are already in a call.");
     const generation = ++this.generation;
     this.id = callId;
@@ -185,16 +191,27 @@ export class CallController {
 
   async setAudioInput(deviceId: string): Promise<void> {
     if (!this.peer) throw new Error("Start or accept a call before changing its microphone.");
+    const peer = this.peer;
+    const generation = this.generation;
     const constraints: MediaTrackConstraints = { echoCancellation: this.audio.echoCancellation, noiseSuppression: this.audio.noiseSuppression, autoGainControl: this.audio.autoGainControl };
     if (deviceId) constraints.deviceId = { exact: deviceId };
     const stream = await navigator.mediaDevices.getUserMedia({ audio: constraints });
     const track = stream.getAudioTracks()[0];
-    const sender = this.peer.getSenders().find((item) => item.track?.kind === "audio");
+    if (generation !== this.generation || this.peer !== peer || TERMINAL.includes(this.state)) {
+      stream.getTracks().forEach((item) => item.stop());
+      return;
+    }
+    const sender = peer.getSenders().find((item) => item.track?.kind === "audio");
     if (!track || !sender) { stream.getTracks().forEach((item) => item.stop()); throw new Error("The selected microphone is not available."); }
+    track.enabled = !this.muted;
     await sender.replaceTrack(track);
+    if (generation !== this.generation || this.peer !== peer || TERMINAL.includes(this.state)) {
+      track.stop();
+      return;
+    }
     for (const old of this.localStream?.getTracks() ?? []) old.stop();
     this.localStream = stream;
-    this.setMuted(this.muted);
+    this.emit();
   }
 
   async setAudioOutput(deviceId: string): Promise<void> {
@@ -214,6 +231,7 @@ export class CallController {
     element.autoplay = true;
     element.srcObject = this.remoteStream;
     void element.play().catch(() => undefined);
+    void this.applyAudioOutputPreference().catch(() => undefined);
   }
 
   hangup(): void { this.finishLocally("ENDED", "hangup"); }
@@ -259,7 +277,9 @@ export class CallController {
         if (typeof event.data !== "string") return;
         try {
           const message = JSON.parse(event.data) as Envelope;
-          if (message.type === "incoming-call") {
+          if (message.type === "session-invalid") {
+            this.invalidateSession();
+          } else if (message.type === "incoming-call") {
             const invite = message as unknown as IncomingCallInvite & Envelope;
             if (invite.expiresAt > Date.now() && typeof invite.callId === "string") this.options.onIncomingCall?.(invite);
           } else if (message.type === "incoming-call-ended" && typeof message.callId === "string") {
@@ -287,11 +307,15 @@ export class CallController {
     if (this.audio.audioInputDeviceId) constraints.deviceId = { exact: this.audio.audioInputDeviceId };
     const stream = await navigator.mediaDevices.getUserMedia({ audio: constraints });
     if (generation !== this.generation) { stream.getTracks().forEach((track) => track.stop()); return; }
+    for (const track of stream.getAudioTracks()) track.enabled = !this.muted;
     this.localStream = stream;
     const servers = this.options.iceServers ?? await this.fetchTurnServers();
     if (generation !== this.generation) { stream.getTracks().forEach((track) => track.stop()); return; }
     this.peer = new RTCPeerConnection({ iceServers: servers });
-    for (const track of stream.getTracks()) this.peer.addTrack(track, stream);
+    for (const track of stream.getTracks()) {
+      track.enabled = !this.muted;
+      this.peer.addTrack(track, stream);
+    }
     this.preferOpusCodec();
     this.peer.onicecandidate = (event) => { if (event.candidate) this.send({ type: "ice-candidate", payload: event.candidate.toJSON() }); };
     this.peer.ontrack = (event) => {
@@ -367,6 +391,7 @@ export class CallController {
     if (typeof raw !== "string") return;
     let message: Envelope;
     try { message = JSON.parse(raw) as Envelope; } catch { return; }
+    if (message.type === "session-invalid") { this.invalidateSession(); return; }
     if (message.type === "call-state") {
       const state = asState(message.status);
       if (!state) return;
@@ -403,6 +428,11 @@ export class CallController {
   private send(message: Envelope): void {
     if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify(message));
   }
+  private async applyAudioOutputPreference(): Promise<void> {
+    if (!this.remoteAudio || !this.audio.audioOutputDeviceId) return;
+    const output = this.remoteAudio as HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> };
+    if (output.setSinkId) await output.setSinkId(this.audio.audioOutputDeviceId);
+  }
   private async applyBitrate(): Promise<void> {
     if (!this.peer) return;
     const mode = this.audio.bitrateMode ?? "standard";
@@ -430,8 +460,9 @@ export class CallController {
     this.generation++;
     this.send({ type: signal });
     this.setState(state);
-    if (this.reconnectTimer) window.clearTimeout(this.reconnectTimer);
-    window.setTimeout(() => this.cleanup(), 150);
+    // WebSocket.close flushes already queued messages; an arbitrary delayed
+    // cleanup can stop the microphone of a new call started in that interval.
+    this.cleanup();
   }
 
   private prepareForNewCall(): void {
@@ -454,6 +485,22 @@ export class CallController {
   private emit(): void { this.options.onChange?.(this.currentSnapshot()); }
   private currentSnapshot(): CallSnapshot {
     return { id: this.id, state: this.state, role: this.role, durationMs: this.connectedAt ? Date.now() - this.connectedAt : 0, muted: this.muted, connectionState: this.peer?.connectionState ?? "new" };
+  }
+  private invalidateSession(): void {
+    if (this.sessionInvalid) return;
+    this.sessionInvalid = true;
+    this.presenceStopped = true;
+    this.generation++;
+    if (this.presenceRetryTimer) window.clearTimeout(this.presenceRetryTimer);
+    this.presenceRetryTimer = undefined;
+    if (this.presenceHeartbeat) window.clearInterval(this.presenceHeartbeat);
+    this.presenceHeartbeat = undefined;
+    this.presenceSocket?.close(1000, "Session ended");
+    this.presenceSocket = undefined;
+    this.cleanup();
+    this.setState("FAILED");
+    this.options.onPresenceChange?.(false);
+    this.options.onError?.(new Error("Your session ended. Sign in again."));
   }
   private fail(error: unknown): void {
     const normalized = normalizeError(error);

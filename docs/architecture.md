@@ -39,6 +39,8 @@ sequenceDiagram
 
 公共通话记录默认私有。公开由所有者显式开启，可撤销、设定过期时间并更改 slug。公开内容不包含邮箱、内部 ID、会话或凭据；参与者姓名仅在参与者明确授权后展示。公开记录页面设置 `noindex, nofollow`。临时用户通过记录专用的 HttpOnly capability cookie 保留后续管理/撤销能力；该能力不使用可预测记录 ID。
 
+第三份迁移将记录所有者外键改为 `ON DELETE SET NULL`，并保留通话元数据快照，因此临时身份被清理后，独立 capability 仍可管理相应记录。此 Cookie 并不是跨设备恢复账号：丢失后可能无法恢复管理。自由备注与元数据值不具备自动个人信息脱敏能力，公开前必须审阅自行填写的内容。
+
 ## TURN 用量
 
 Worker 使用 Cloudflare Realtime 官方 GraphQL Analytics 查询 `egressBytes`，并以 `customIdentifier` 区分用户。定时任务每小时轮转最多 25 个活动用户并将估算快照写入 D1。采样数据可能延迟或不完整，因此接口标记 `authoritative: false`。`TURN_MONTHLY_QUOTA_BYTES` 是展示配额，不是实时的流量闸门。分析 API token 仅存在于 Worker secret，不会返回浏览器。
@@ -48,4 +50,5 @@ Worker 使用 Cloudflare Realtime 官方 GraphQL Analytics 查询 `egressBytes`�
 - Workers Web Crypto 不提供原生 Argon2id 派生函数；本实现使用 310,000 轮 PBKDF2-SHA-256，并保存版本标记，便于以后更换哈希方案。
 - D1 原子计数是强制登录限流；KV 绑定未启用，因为当前没有非关键缓存需要它。
 - R2 用于头像或用户上传是可选能力，当前未启用。
-- 自动化检查包含类型检查、lint、前端/API 客户端单元测试、生产构建和本地 SQL migration 应用；真实浏览器跨 NAT 通话、不同浏览器扬声器切换和完整 3DS/支付流程不属于本项目，必须由部署后的真实环境测试。
+- 自动化检查包含类型检查、lint、前端与后端单元测试、生产构建及隔离的本地 Worker/D1 HTTP 集成测试；详见 [testing.md](testing.md)。真实浏览器跨 NAT 音频、并发/多设备行为、不同浏览器扬声器切换及远端 Durable Object 生命周期仍需另外验收。
+- 支付和 3DS 不属于本项目范围。生产部署目前暂停，不能把本地通过表述为已上线。

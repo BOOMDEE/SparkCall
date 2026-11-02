@@ -1,0 +1,36 @@
+{
+  "eyebrow": "Privacy controls",
+  "title": "Blocked users",
+  "description": "Manage numbers that cannot establish calls with you. Blocking is enforced by the server in both directions.",
+  "form": {
+    "title": "Block a number",
+    "detail": "Enter a SparkCall number to prevent future calls between you and that user.",
+    "label": "SparkCall number",
+    "placeholder": "Number to block",
+    "submit": "Block number",
+    "submitting": "Blocking…"
+  },
+  "list": {
+    "title": "Blocked numbers",
+    "count": "{{count}} blocked",
+    "blockedOn": "Blocked {{date}}",
+    "unblock": "Unblock",
+    "unblocking": "Unblocking…",
+    "unblockLabel": "Unblock {{name}}"
+  },
+  "empty": {
+    "title": "No blocked users",
+    "detail": "Numbers you block will appear here."
+  },
+  "states": {
+    "loading": "Loading blocked users…",
+    "loadError": "Could not load blocked users."
+  },
+  "notices": {
+    "security": "Blocked users cannot establish calls with you in either direction. This rule is enforced by the server.",
+    "blocked": "User blocked. Future calls are rejected by the server.",
+    "unblocked": "User unblocked.",
+    "blockFallback": "Could not block this number.",
+    "unblockFallback": "Could not unblock this user."
+  }
+}

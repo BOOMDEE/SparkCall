@@ -1,0 +1,61 @@
+{
+  "eyebrow": "工作区",
+  "title": "联系人",
+  "detail": "按姓名或 SparkCall 号码搜索。联系人记录仅对你的账户可见。",
+  "actions": {
+    "add": "添加联系人",
+    "closeForm": "关闭表单",
+    "saveContact": "保存联系人",
+    "addFirst": "添加第一个联系人",
+    "back": "返回联系人",
+    "saveChanges": "保存更改",
+    "call": "拨号",
+    "block": "屏蔽",
+    "delete": "删除",
+    "addFavoriteAria": "将 {{name}} 添加到收藏",
+    "removeFavoriteAria": "将 {{name}} 移出收藏",
+    "callAria": "呼叫 {{name}}"
+  },
+  "form": {
+    "title": "添加联系人",
+    "detail": "保存姓名和号码，拨号更快捷。"
+  },
+  "fields": {
+    "number": "SparkCall 号码",
+    "name": "姓名",
+    "notes": "备注",
+    "favorite": "收藏联系人"
+  },
+  "placeholders": {
+    "number": "输入准确的 SparkCall 号码",
+    "name": "显示在联系人中的姓名",
+    "notes": "可选备注"
+  },
+  "search": {
+    "aria": "搜索联系人",
+    "placeholder": "按姓名或号码搜索",
+    "hint": "姓名或号码"
+  },
+  "labels": { "favorite": "已收藏" },
+  "states": { "loading": "正在加载联系人…" },
+  "empty": {
+    "title": "还没有联系人",
+    "detail": "添加 SparkCall 号码，创建你的第一个联系人。",
+    "noMatchTitle": "没有匹配的联系人",
+    "noMatchDetail": "请尝试其他姓名或号码。"
+  },
+  "notices": {
+    "added": "联系人已添加。",
+    "saved": "联系人已保存。"
+  },
+  "errors": {
+    "load": "无法加载联系人。{{detail}}",
+    "add": "无法添加联系人。",
+    "favorite": "无法更新收藏状态。",
+    "save": "无法保存联系人。",
+    "delete": "无法删除联系人。",
+    "block": "无法屏蔽此联系人。"
+  },
+  "confirm": { "delete": "确定删除此联系人吗？此操作无法撤销。" },
+  "detailPage": { "eyebrow": "联系人", "title": "联系人详情" }
+}

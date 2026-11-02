@@ -18,8 +18,8 @@ export function formatDuration(seconds: number | null | undefined): string {
 }
 
 export function formatElapsed(milliseconds: number): string { return formatDuration(milliseconds / 1_000); }
-export function formatDate(value: string | null | undefined): string {
+export function formatDate(value: string | null | undefined, locale?: string): string {
   if (!value) return "—";
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString();
+  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString(locale);
 }

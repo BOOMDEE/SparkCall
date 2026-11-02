@@ -1,0 +1,33 @@
+{
+  "brand": {
+    "homeLabel": "SparkCall home"
+  },
+  "navigation": {
+    "label": "Main navigation",
+    "signIn": "Sign in",
+    "createAccount": "Create account"
+  },
+  "eyebrow": "Browser voice calling",
+  "title": "Start a call from the browser.",
+  "description": "SparkCall gives you a browser-based place to use a SparkCall number, reach a contact, and manage a voice call without installing a native app.",
+  "actions": {
+    "createAccount": "Create an account",
+    "temporaryAccount": "Try a temporary account",
+    "starting": "Starting…"
+  },
+  "details": {
+    "label": "Before you start",
+    "browser": {
+      "title": "WebRTC audio",
+      "detail": "Calls use your browser microphone and WebRTC. Depending on the connection, audio may use a configured TURN relay."
+    },
+    "temporary": {
+      "title": "Temporary access",
+      "detail": "Temporary identities expire after 24 hours. Microphone permission and a working call configuration are required."
+    }
+  },
+  "errors": {
+    "temporaryAccount": "Could not create a temporary session. {{detail}}",
+    "unknown": "Please try again."
+  }
+}

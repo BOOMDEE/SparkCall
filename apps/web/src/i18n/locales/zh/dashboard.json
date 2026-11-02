@@ -1,0 +1,79 @@
+{
+  "eyebrow": "工作区",
+  "title": "开始一次私密通话",
+  "detail": "在一个页面查看你的号码、联系人和近期活动。",
+  "actions": {
+    "openDialer": "打开拨号台",
+    "call": "呼叫",
+    "claimNumber": "领取号码",
+    "allContacts": "全部联系人",
+    "viewHistory": "查看历史",
+    "usageDetails": "使用详情",
+    "audioSettings": "音频设置",
+    "browseContacts": "浏览联系人"
+  },
+  "identity": {
+    "label": "你的 SparkCall 号码",
+    "notClaimed": "尚未领取",
+    "copyAria": "复制我的 SparkCall 号码",
+    "copySuccess": "你的 SparkCall 号码已复制。",
+    "copyError": "无法自动复制。请选中上方号码并手动复制。",
+    "connected": "在线",
+    "offline": "离线",
+    "onlineHelp": "在线状态已连接",
+    "offlineHelp": "在线状态尚未连接"
+  },
+  "quickDial": {
+    "title": "呼叫号码",
+    "detail": "输入完整的 SparkCall 号码，并注意字母大小写。",
+    "aria": "SparkCall 号码",
+    "placeholder": "输入号码",
+    "submit": "呼叫"
+  },
+  "gettingStarted": {
+    "title": "随时可以开始",
+    "detail": "使用联系人，或输入 SparkCall 号码开始通话。",
+    "numberReady": "你的号码已准备好",
+    "numberNeeded": "领取你的 SparkCall 号码",
+    "numberNeededDetail": "呼叫时，号码用于标识你的身份。",
+    "contactsReady": "已有可用联系人",
+    "contactsEmpty": "添加联系人即可一键呼叫",
+    "contactsLoading": "正在加载联系人…",
+    "contactsUnavailable": "联系人暂时不可用",
+    "presenceOnline": "通话在线状态已连接",
+    "presenceOffline": "通话在线状态离线",
+    "presenceDetail": "在线状态重新连接期间，你仍可准备号码或联系人。",
+    "continue": "继续"
+  },
+  "contacts": {
+    "title": "联系人快捷方式",
+    "emptyTitle": "还没有联系人",
+    "emptyDetail": "添加 SparkCall 号码对应的联系人后，会显示在这里。",
+    "callAria": "呼叫 {{name}}"
+  },
+  "recent": {
+    "title": "近期通话",
+    "emptyTitle": "还没有通话",
+    "emptyDetail": "已完成和未接通的通话会显示在这里。",
+    "unknownParticipant": "未知参与者",
+    "meta": "{{direction}} · {{status}} · {{duration}}",
+    "incoming": "呼入",
+    "outgoing": "呼出"
+  },
+  "usage": {
+    "label": "TURN 用量 · {{month}}",
+    "unavailable": "不可用",
+    "allowance": "每月额度为 {{quota}}",
+    "configure": "配置 Cloudflare Realtime 分析后即可显示用量。",
+    "used": "已使用 {{percentage}}% · 剩余 {{remaining}}"
+  },
+  "states": {
+    "loading": "正在加载…"
+  },
+  "errors": {
+    "loadHistory": "无法加载近期通话：{{detail}}",
+    "loadContacts": "无法加载联系人：{{detail}}",
+    "loadUsage": "无法加载用量：{{detail}}",
+    "presence": "通话状态：{{detail}}"
+  }
+}

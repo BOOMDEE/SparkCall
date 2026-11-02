@@ -1,0 +1,19 @@
+{
+  "eyebrow": "Private workspace",
+  "title": "Call records",
+  "detail": "Create a private summary of a call. Records never include audio, and public sharing stays off until you explicitly enable it.",
+  "actions": { "closeForm": "Close form", "newRecord": "New record", "creating": "Creating…", "createPrivate": "Create private record", "close": "Close", "edit": "Edit", "copied": "Copied", "copyLink": "Copy link", "deleteAria": "Delete record", "save": "Save changes", "saving": "Saving…", "viewPublic": "View public page" },
+  "security": { "ownerNote": "Only the signed-in owner can manage these records. A temporary account may also receive a secure, browser-bound recovery capability; it is never displayed or included in the record URL." },
+  "create": { "title": "Create a private call record", "detail": "This record starts private. You decide whether and when to publish it.", "privacyNote": "Do not enter account emails, credentials, or private session data. Call audio is never stored in a record.", "capabilityNote": "If this temporary session is eligible, management recovery is stored in a secure HttpOnly browser cookie—not in the page or public link." },
+  "fields": { "slug": "Public URL slug", "title": "Title", "associatedCall": "Associated call (optional)", "description": "Description", "notes": "Notes", "tags": "Tags (comma-separated)", "expiration": "Expiration (optional)", "participants": "Participant display names (one per line)", "metadata": "Custom metadata (JSON object)" },
+  "placeholders": { "slug": "project-meeting", "title": "Project check-in", "tags": "planning, project", "participants": "Names are not added unless you confirm consent below." },
+  "options": { "noLinkedCall": "No linked call", "incoming": "Incoming", "outgoing": "Outgoing" },
+  "consent": { "create": "I have appropriate consent to include these display names if I later publish this record. Without consent, names are not stored.", "publicActive": "Public link is active", "keepPrivate": "Keep this record private", "publicWarning": "Publishing makes this record and its participant information available at its public URL. Confirm participant consent before saving.", "privateNote": "This record remains private until you explicitly publish it." },
+  "status": { "public": "Public", "private": "Private", "expired": "Expired" },
+  "record": { "updated": "updated {{date}}", "noDescription": "No description", "duration": "Call duration: {{duration}}", "participants": "{{count}} participant(s)", "expires": "Expires {{date}}" },
+  "states": { "loading": "Loading call records…" },
+  "empty": { "title": "No call records", "detail": "Create a private summary; you decide if and when to publish it." },
+  "notices": { "created": "Private record created. Publishing is an explicit action.", "createdWithRecovery": "Private record created. A separate recovery credential is saved in this browser so you can still manage it if your temporary session expires." },
+  "errors": { "invalidMetadata": "Custom metadata must be valid JSON.", "createFailed": "Could not create record", "loadFailed": "Could not load records", "saveFailed": "Could not save record", "deleteFailed": "Could not delete record", "copyFailed": "Could not copy the public link" },
+  "confirm": { "publish": "Publish this record? Its contents and participant information will be available at the public URL only after you confirm.", "delete": "Delete {{title}}? This cannot be undone." }
+}

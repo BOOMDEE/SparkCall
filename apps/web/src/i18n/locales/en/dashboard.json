@@ -1,0 +1,79 @@
+{
+  "eyebrow": "Workspace",
+  "title": "Start a private call",
+  "detail": "Your number, contacts, and recent activity in one place.",
+  "actions": {
+    "openDialer": "Open dialer",
+    "call": "Call",
+    "claimNumber": "Claim a number",
+    "allContacts": "All contacts",
+    "viewHistory": "View history",
+    "usageDetails": "Usage details",
+    "audioSettings": "Audio settings",
+    "browseContacts": "Browse contacts"
+  },
+  "identity": {
+    "label": "Your SparkCall number",
+    "notClaimed": "Not claimed",
+    "copyAria": "Copy my SparkCall number",
+    "copySuccess": "Your SparkCall number was copied.",
+    "copyError": "Could not copy automatically. Select the number above and copy it manually.",
+    "connected": "Online",
+    "offline": "Offline",
+    "onlineHelp": "Presence is connected",
+    "offlineHelp": "Presence is not connected yet"
+  },
+  "quickDial": {
+    "title": "Call a number",
+    "detail": "Enter the exact SparkCall number, including letter case.",
+    "aria": "SparkCall number",
+    "placeholder": "Enter a number",
+    "submit": "Call"
+  },
+  "gettingStarted": {
+    "title": "Ready when you are",
+    "detail": "Use a contact or enter a SparkCall number to begin.",
+    "numberReady": "Your number is ready",
+    "numberNeeded": "Claim your SparkCall number",
+    "numberNeededDetail": "A number identifies you when you call.",
+    "contactsReady": "Contacts are available",
+    "contactsEmpty": "Add a contact for one-tap calling",
+    "contactsLoading": "Loading contacts…",
+    "contactsUnavailable": "Contacts unavailable",
+    "presenceOnline": "Calling presence is online",
+    "presenceOffline": "Calling presence is offline",
+    "presenceDetail": "You can still prepare a number or contact while presence reconnects.",
+    "continue": "Continue"
+  },
+  "contacts": {
+    "title": "Contact shortcuts",
+    "emptyTitle": "No contacts yet",
+    "emptyDetail": "Add a contact by SparkCall number to see it here.",
+    "callAria": "Call {{name}}"
+  },
+  "recent": {
+    "title": "Recent calls",
+    "emptyTitle": "No calls yet",
+    "emptyDetail": "Your completed and missed calls will appear here.",
+    "unknownParticipant": "Unknown participant",
+    "meta": "{{direction}} · {{status}} · {{duration}}",
+    "incoming": "Incoming",
+    "outgoing": "Outgoing"
+  },
+  "usage": {
+    "label": "TURN usage · {{month}}",
+    "unavailable": "Unavailable",
+    "allowance": "of {{quota}} monthly allowance",
+    "configure": "Configure Cloudflare Realtime analytics to show usage.",
+    "used": "{{percentage}}% used · {{remaining}} remaining"
+  },
+  "states": {
+    "loading": "Loading…"
+  },
+  "errors": {
+    "loadHistory": "Could not load recent calls: {{detail}}",
+    "loadContacts": "Could not load contacts: {{detail}}",
+    "loadUsage": "Could not load usage: {{detail}}",
+    "presence": "Calling status: {{detail}}"
+  }
+}

@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api, type IncomingCallInvite, type UserPreferences } from "../lib/api";
 import { CallController, type CallSnapshot } from "../lib/webrtc";
-import { Button, Notice } from "../components/ui";
+import { AccessibleDialog, Button, Notice } from "../components/ui";
 import { Phone, PhoneOff } from "lucide-react";
 
 const DEFAULT_PREFERENCES: UserPreferences = {
@@ -14,6 +14,7 @@ type CallSessionValue = {
   snapshot: CallSnapshot;
   online: boolean;
   incoming: IncomingCallInvite | null;
+  peer: IncomingCallInvite | null;
   preferences: UserPreferences;
   error: string | null;
   clearError: () => void;
@@ -23,6 +24,7 @@ type CallSessionValue = {
 };
 const CallSessionContext = createContext<CallSessionValue | null>(null);
 const IDLE: CallSnapshot = { id: null, state: "IDLE", role: null, durationMs: 0, muted: false, connectionState: "new" };
+const TERMINAL = new Set(["ENDED", "REJECTED", "BUSY", "TIMEOUT", "FAILED", "CANCELLED"]);
 
 export function useCallSession() {
   const value = useContext(CallSessionContext);
@@ -38,6 +40,7 @@ export function CallSessionProvider({ children }: { children: ReactNode }) {
   const [snapshot, setSnapshot] = useState(IDLE);
   const [online, setOnline] = useState(false);
   const [incoming, setIncomingState] = useState<IncomingCallInvite | null>(null);
+  const [peer, setPeer] = useState<IncomingCallInvite | null>(null);
   const [preferences, setPreferences] = useState(DEFAULT_PREFERENCES);
   const [error, setError] = useState<string | null>(null);
   const setIncoming = useCallback((invite: IncomingCallInvite | null) => {
@@ -52,7 +55,10 @@ export function CallSessionProvider({ children }: { children: ReactNode }) {
       onChange: (next) => { if (active) setSnapshot(next); },
       onIncomingCall: (invite) => {
         if (!active) return;
-        if (callController.snapshot.state !== "IDLE" || incomingRef.current) {
+        // A terminal snapshot belongs to the previous call. CallController prepares
+        // itself for the next call, so it must not reject this new invite as busy.
+        const state = callController.snapshot.state;
+        if ((!TERMINAL.has(state) && state !== "IDLE") || incomingRef.current) {
           const busyResponder = new CallController();
           void busyResponder.rejectIncoming(invite.callId);
           return;
@@ -100,6 +106,8 @@ export function CallSessionProvider({ children }: { children: ReactNode }) {
   const acceptIncoming = useCallback(async () => {
     const invite = incomingRef.current;
     if (!invite) return;
+    // Keep identity after the prompt disappears so controls and the dialer can render it.
+    setPeer(invite);
     setIncoming(null);
     try { await controllerRef.current?.acceptIncoming(invite.callId); }
     catch (cause) { setError(cause instanceof Error ? cause.message : "Could not accept the call."); }
@@ -112,24 +120,22 @@ export function CallSessionProvider({ children }: { children: ReactNode }) {
   }, [setIncoming]);
 
   const value = useMemo<CallSessionValue>(() => ({
-    controller, snapshot, online, incoming, preferences, error, clearError,
+    controller, snapshot, online, incoming, peer, preferences, error, clearError,
     updatePreferences, acceptIncoming, rejectIncoming,
-  }), [controller, snapshot, online, incoming, preferences, error, clearError, updatePreferences, acceptIncoming, rejectIncoming]);
+  }), [controller, snapshot, online, incoming, peer, preferences, error, clearError, updatePreferences, acceptIncoming, rejectIncoming]);
 
   return <CallSessionContext.Provider value={value}>
     {children}
     <audio ref={audioRef} className="sr-only" autoPlay aria-label="Call audio" />
-    {incoming && <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4">
-      <section className="w-full max-w-sm rounded-lg border border-neutral-200 bg-white p-6 shadow-xl dark:border-neutral-800 dark:bg-neutral-950" role="dialog" aria-modal="true" aria-labelledby="incoming-call-title">
-        <div className="grid h-10 w-10 place-items-center rounded-full bg-neutral-100 dark:bg-neutral-900"><Phone size={18} /></div>
-        <h2 id="incoming-call-title" className="mt-4 text-lg font-semibold">Incoming call</h2>
-        <p className="mt-1 text-sm text-neutral-500">{incoming.callerName} · {incoming.callerNumber}</p>
-        {error && <div className="mt-4"><Notice>{error}</Notice></div>}
-        <div className="mt-6 flex justify-end gap-2">
-          <Button variant="secondary" onClick={() => void rejectIncoming()}><PhoneOff size={16} /> Decline</Button>
-          <Button onClick={() => void acceptIncoming()}><Phone size={16} /> Answer</Button>
-        </div>
-      </section>
-    </div>}
+    <AccessibleDialog open={Boolean(incoming)} onClose={() => void rejectIncoming()} titleId="incoming-call-title" className="w-full max-w-sm rounded-lg border border-neutral-200 bg-white p-6 shadow-xl dark:border-neutral-800 dark:bg-neutral-950">
+      <div className="grid h-10 w-10 place-items-center rounded-full bg-neutral-100 dark:bg-neutral-900"><Phone size={18} /></div>
+      <h2 id="incoming-call-title" className="mt-4 text-lg font-semibold">Incoming call</h2>
+      <p className="mt-1 text-sm text-neutral-500">{incoming?.callerName} · {incoming?.callerNumber}</p>
+      {error && <div className="mt-4"><Notice>{error}</Notice></div>}
+      <div className="mt-6 flex justify-end gap-2">
+        <Button variant="secondary" onClick={() => void rejectIncoming()}><PhoneOff size={16} /> Decline</Button>
+        <Button onClick={() => void acceptIncoming()}><Phone size={16} /> Answer</Button>
+      </div>
+    </AccessibleDialog>
   </CallSessionContext.Provider>;
 }

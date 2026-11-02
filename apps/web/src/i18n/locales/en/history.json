@@ -1,0 +1,19 @@
+{
+  "eyebrow": "Private workspace",
+  "title": "Call history",
+  "detail": "Call metadata only. SparkCall does not record call audio.",
+  "detailTitle": "Call details",
+  "detailDescription": "Metadata for this call.",
+  "filters": { "searchLabel": "Search call history", "searchPlaceholder": "Search by number", "typeLabel": "Filter call history", "all": "All calls", "incoming": "Incoming", "outgoing": "Outgoing", "missed": "Missed" },
+  "table": { "participant": "Participant", "direction": "Direction", "status": "Status", "started": "Started" },
+  "fields": { "participant": "Participant", "direction": "Direction", "status": "Status", "duration": "Duration", "started": "Started", "ended": "Ended" },
+  "direction": { "incoming": "Incoming", "outgoing": "Outgoing" },
+  "status": { "connected": "Connected", "ended": "Ended", "timeout": "Timed out", "rejected": "Rejected", "failed": "Failed", "busy": "Busy" },
+  "actions": { "back": "Call history", "callAgain": "Call again", "createRecord": "Create call record" },
+  "states": { "loading": "Loading call history…" },
+  "empty": { "title": "No calls found", "detail": "Try a different filter or place your first call.", "detailTitle": "Call not found", "detailDescription": "This call is no longer available." },
+  "errors": { "load": "Could not load call history. {{detail}}", "loadDetail": "Could not load call details. {{detail}}" },
+  "unknownParticipant": "Unknown participant",
+  "notAvailable": "Not available",
+  "privacyNote": "The call ID is private metadata and is not published with a record unless you choose to share a public link."
+}

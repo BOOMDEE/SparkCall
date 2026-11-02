@@ -2,6 +2,7 @@ import type { Env } from "./env";
 import { handleApi } from "./api";
 import { handleRealtimeApi } from "./calls";
 import { snapshotActiveUserUsage } from "./turn";
+import { serveStaticAssets } from "./assets";
 
 export { SparkCallDurableObject, SparkCallPresenceObject } from "./signaling";
 
@@ -42,12 +43,7 @@ export default {
       if (realtime) return secureRealtimeResponse(realtime, request, env);
       return handleApi(request, env);
     }
-    const response = await env.ASSETS.fetch(request);
-    const headers = new Headers(response.headers);
-    headers.set("x-content-type-options", "nosniff");
-    headers.set("referrer-policy", "no-referrer");
-    headers.set("x-frame-options", "DENY");
-    return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+    return serveStaticAssets(request, env);
   },
 
   scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext) {

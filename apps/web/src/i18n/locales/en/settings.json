@@ -1,0 +1,31 @@
+{
+  "title": "Settings",
+  "description": "Manage your identity, calling preferences, privacy, notifications, and display.",
+  "navigationLabel": "Settings sections",
+  "sections": { "account": "Account", "audio": "Audio", "privacy": "Privacy", "notifications": "Notifications", "appearance": "Appearance", "usage": "Usage" },
+  "actions": { "saveDisplayName": "Save display name", "checkAvailability": "Check availability", "saving": "Saving…", "claimNumber": "Claim number", "upgrade": "Upgrade account", "refreshDevices": "Refresh devices" },
+  "states": { "loading": "Loading usage…" },
+  "errors": {
+    "profile": "Could not save your profile. {{code}}",
+    "availability": "Could not check number availability. {{code}}",
+    "claimNumber": "Could not claim this number. {{code}}",
+    "upgrade": "Could not upgrade the account. {{code}}",
+    "audioAccess": "Could not access audio devices. {{code}}",
+    "audioSave": "Could not save audio preferences. {{code}}",
+    "privacySave": "Could not save privacy preferences. {{code}}",
+    "usage": "Could not load usage data. {{code}}",
+    "appearanceSave": "Could not save appearance preference. {{code}}"
+  },
+  "account": {
+    "title": "Account and identity", "detail": "Your SparkCall identity is separate from your login session.", "displayName": "Display name", "username": "Username", "temporary": "Temporary account", "displayNameSaved": "Display name saved.",
+    "numberTitle": "SparkCall number", "currentNumber": "Current number:", "notClaimed": "Not claimed", "temporaryNumber": "Temporary accounts use an automatically generated number and cannot claim a custom number.", "chooseNumber": "Choose a number", "numberPlaceholder": "Letters and numbers only; case-sensitive", "available": "Available", "unavailable": "Unavailable", "numberSaved": "SparkCall number saved.", "numberCooldown": "Numbers are case-sensitive. You can change your number once every 30 days.",
+    "upgradeTitle": "Upgrade temporary account", "upgradeDetail": "Create a permanent username and password while preserving this identity and its eligible data.", "password": "Password", "upgradeSaved": "Your temporary identity is now a permanent account. Existing contacts and call records remain on this identity.", "expires": "This temporary account expires {{date}}."
+  },
+  "audio": {
+    "title": "Audio", "detail": "Settings are persisted and used on future calls. Actual audio bitrate can vary with network conditions and codec behavior.", "saved": "Audio preferences saved.", "echoCancellation": "Echo cancellation", "noiseSuppression": "Noise suppression", "autoGainControl": "Automatic gain control", "devicesTitle": "Audio devices", "microphone": "Microphone", "speaker": "Speaker", "systemDefault": "System default", "devicesDetail": "Device names appear after you grant microphone access. Speaker switching depends on browser support.", "bitrate": "Outgoing bitrate target", "low": "Low · 16 kbps", "standard": "Standard · 32 kbps", "high": "High · 64 kbps", "custom": "Custom", "customTarget": "Custom target (6–128 kbps)"
+  },
+  "privacy": { "title": "Privacy", "detail": "Call audio is not recorded. Blocking and incoming-call settings are enforced by the server.", "allowIncoming": "Allow incoming calls", "allowIncomingDetail": "Declined calls are rejected before WebRTC setup.", "showOnlineStatus": "Show online status", "showOnlineStatusDetail": "Controls whether presence may be shared by future public-facing features." },
+  "notifications": { "title": "Notifications", "detail": "Review notification preferences for your SparkCall workspace.", "emptyTitle": "No notification preferences available", "emptyDetail": "SparkCall does not currently expose notification controls for this account." },
+  "appearance": { "title": "Appearance", "detail": "Choose light, dark, or follow your system preference.", "theme": "Theme", "system": "System", "light": "Light", "dark": "Dark" },
+  "usage": { "title": "TURN usage", "detail": "Monthly relay usage from Cloudflare Realtime analytics. Sampled analytics may not equal final billing data.", "unavailable": "Usage reporting is not configured or the analytics service returned no data. Calls can still work when TURN credentials are configured.", "unavailableValue": "Unavailable", "monthly": "Monthly usage", "quota": "Quota", "remaining": "Remaining", "quotaUsed": "Quota used", "month": "Month", "lastUpdated": "Last updated", "source": "Data source", "accounting": "Accounting", "authoritative": "Authoritative", "estimated": "Estimated / sampled", "platformTitle": "Platform total · authorized administrators", "egress": "TURN egress", "platformDetail": "Aggregate values are sampled estimates, not authoritative billing totals." }
+}

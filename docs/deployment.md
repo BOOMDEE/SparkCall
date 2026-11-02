@@ -7,6 +7,8 @@
 - 自定义域名：`https://app.example.com`
 - Wrangler 配置：仓库根目录 `wrangler.jsonc`
 
+当前仅完成代码与本地验证工作；生产部署保持暂停。以下步骤是未来经维护者决定发布时使用的操作指南，不表示已上线。
+
 ## 一次性准备
 
 1. GitHub Actions API token 仅授予目标 Cloudflare 账号的 **Workers Scripts: Edit** 和 **D1: Edit**，用于本工作流的 Worker 部署与 D1 migrations；不要把 TURN key 管理权限混入日常部署 token。也可从手动工作流选择设备授权。
@@ -16,7 +18,7 @@
    - `TURN_API_TOKEN`：TURN key 创建后返回的一次性 key；仅保存在 Worker secret 中。
    - `TURN_ANALYTICS_API_TOKEN`：可选的 Account Analytics Read token，用于 GraphQL Realtime 用量统计。
 3. 设置非敏感 Worker variables：`CLOUDFLARE_ACCOUNT_ID`、`TURN_MONTHLY_QUOTA_BYTES`，可选 `ADMIN_USER_IDS`、`SESSION_TTL_SECONDS` 和 `TEMP_SESSION_TTL_SECONDS`。`ADMIN_USER_IDS` 是逗号分隔的 SparkCall 内部 user ID。
-4. 如用 GitHub Actions 自动部署，把 `CLOUDFLARE_ACCOUNT_ID` 和最小权限 `CLOUDFLARE_API_TOKEN` 添加到仓库 Actions secrets；不要把 token 写入 YAML。
+4. 仅当项目所有者批准并手动 dispatch `api-token` 模式时，才将 `CLOUDFLARE_ACCOUNT_ID` 和最小权限 `CLOUDFLARE_API_TOKEN` 配置为仓库 Actions secrets；不要把 token 写入 YAML。
 
 TURN analytics token 与 TURN key 是不同凭据。未配置 analytics token 时，通话服务仍可签发 TURN credentials，但月度用量面板显示“未配置”。
 
@@ -46,11 +48,13 @@ npx wrangler deploy
 
 ## GitHub Actions
 
-- `test.yml`：push、PR 和手动运行质量门禁及本地 D1 migration 验证。
+- `test.yml`：push、PR 和手动运行质量门禁，以及隔离本地 D1/HTTP/WebSocket 集成测试。
 - `preview.yml`：对 PR 运行质量门禁并上传前端构建产物，供审阅下载；默认不公开部署未审阅代码。
-- `deploy.yml`：手动运行时可选择 `api-token` 或 `device`。配置 GitHub Actions secrets 后，再把仓库 variable `CLOUDFLARE_DEPLOY_ENABLED` 设为 `true`，`Main` 分支 push 才会自动迁移并部署；默认关闭可避免尚未配置 credentials 时出现失败部署。device 模式会在日志中显示 Cloudflare verification URL/code，操作人需打开链接并批准，工作流随后继续运行。
+- `deploy.yml`：仅支持明确的手动 workflow dispatch，可选择 `api-token` 或 `device`；没有 push 触发器，也不会因设置仓库变量而自动部署。device 模式会在日志中显示 Cloudflare verification URL/code，操作人需打开链接并批准，工作流随后继续运行。
 
-**设备授权适用于人工手动部署；自动 push 部署应配置 API token。** 若使用 API token，保持最小权限并仅作为 GitHub Actions secret。工作流会先跑同一套质量检查，再应用 D1 migrations，最后部署 Worker 与静态资源。
+**生产部署目前保持暂停。** 只有项目所有者明确批准后，授权操作员才应手动启动工作流。若使用 API token，保持最小权限并仅作为 GitHub Actions secret；部署工作流会先运行质量检查和 `npm run test:integration`，全部成功后才允许认证、应用远端 D1 migrations 并部署 Worker 与静态资源。
+
+所有第三方 Actions 都固定到已核对的官方完整提交 SHA，而非可变的 `@v4` 标签：[checkout](https://github.com/actions/checkout/commit/11d5960a326750d5838078e36cf38b85af677262)、[setup-node](https://github.com/actions/setup-node/commit/49933ea5288caeca8642d1e84afbd3f7d6820020)、[upload-artifact](https://github.com/actions/upload-artifact/commit/ea165f8d65b6e75b540449e92b4886f43607fa02)。升级时应核对官方来源并审阅差异后更新 SHA。
 
 ## 发布后验证
 

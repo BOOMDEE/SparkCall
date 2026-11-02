@@ -1,12 +1,12 @@
 import type { Env } from "./env";
-import { requireAuth } from "./auth";
+import { rateLimit, requireAuth } from "./auth";
 import { body, error, findByNumber, id, isBlocked, json, now, validDialNumber } from "./database";
 
 const ACTIVE = "'calling','ringing','connecting','connected'";
 
 function isSameOrigin(request: Request, env: Env) {
   const origin = request.headers.get("Origin");
-  if (!origin) return true;
+  if (!origin) return false;
   try { return origin === (env.ALLOWED_ORIGIN || new URL(request.url).origin); } catch { return false; }
 }
 
@@ -25,6 +25,11 @@ function internalHeaders(request: Request, env: Env, extra: Record<string, strin
 
 async function createCall(request: Request, env: Env): Promise<Response> {
   const caller = await requireAuth(request, env);
+  const ip = request.headers.get("CF-Connecting-IP") || "unknown";
+  if (!await rateLimit(env, `calls:user:${caller.id}`, 10, 60)
+    || !await rateLimit(env, `calls:ip:${ip}`, 60, 60)) {
+    return error("Too many call attempts; try again shortly", 429, "RATE_LIMITED");
+  }
   const input = await body(request);
   const number = String(input.number ?? input.targetNumber ?? "").trim();
   if (!validDialNumber(number)) return error("Enter a valid SparkCall number", 400, "INVALID_NUMBER");

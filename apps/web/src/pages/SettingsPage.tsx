@@ -1,128 +1,95 @@
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { Link, Navigate, useLocation, useOutletContext } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import { BarChart3, Bell, Check, Mic2, Palette, RefreshCw, Settings2, Shield } from "lucide-react";
 import { useCallSession } from "../contexts/CallSession";
 import { api, type Me, type Usage, type UserPreferences } from "../lib/api";
 import { useResource } from "../hooks/useResource";
 import { formatBytes, formatDate } from "../lib/format";
 import { PageHeader } from "../components/common";
-import { Button, Card, Field, Notice } from "../components/ui";
+import { Button, Card, Empty, Field, Notice } from "../components/ui";
 
-const SECTIONS = [["account", "Account"], ["audio", "Audio"], ["privacy", "Privacy"], ["usage", "Usage"], ["appearance", "Appearance"]] as const;
+type SectionId = "account" | "audio" | "privacy" | "notifications" | "appearance" | "usage";
+const SECTIONS: Array<{ id: SectionId; icon: typeof Settings2 }> = [
+  { id: "account", icon: Settings2 }, { id: "audio", icon: Mic2 }, { id: "privacy", icon: Shield },
+  { id: "notifications", icon: Bell }, { id: "appearance", icon: Palette }, { id: "usage", icon: BarChart3 },
+];
+
+function messageFor(cause: unknown, t: (key: string, options?: Record<string, unknown>) => string, fallback: string) {
+  const code = cause instanceof Error ? cause.message : "";
+  return t(fallback, { code: code && code.length < 120 ? code : "" });
+}
+
 export default function SettingsLayout() {
+  const { t } = useTranslation("settings");
   const location = useLocation();
-  const active = location.pathname.split("/")[2] || "account";
-  const pages: Record<(typeof SECTIONS)[number][0], React.ReactNode> = {
-    account: <AccountSettings />, audio: <AudioSettings />, privacy: <PrivacySettings />, usage: <UsageSettings />, appearance: <AppearanceSettings />,
+  const active = (location.pathname.split("/")[2] || "account") as SectionId;
+  const pages: Record<SectionId, ReactNode> = {
+    account: <AccountSettings />, audio: <AudioSettings />, privacy: <PrivacySettings />,
+    notifications: <NotificationsSettings />, appearance: <AppearanceSettings />, usage: <UsageSettings />,
   };
   if (!Object.hasOwn(pages, active)) return <Navigate to="/settings/account" replace />;
-  return <><PageHeader title="Settings" detail="Manage your identity, calling preferences, privacy, and display." />
-    <div className="grid gap-7 lg:grid-cols-[160px_1fr]"><nav className="flex gap-1 overflow-x-auto lg:block lg:space-y-0.5" aria-label="Settings sections">
-      {SECTIONS.map(([id, label]) => <Link key={id} to={`/settings/${id}`} className={`block whitespace-nowrap rounded-md px-3 py-2 text-sm ${active === id ? "bg-neutral-100 font-medium dark:bg-neutral-900" : "text-neutral-500 hover:bg-neutral-50 dark:hover:bg-neutral-900"}`}>{label}</Link>)}
-    </nav><div className="min-w-0">{pages[active as keyof typeof pages]}</div></div>
+  return <>
+    <PageHeader title={t("title")} detail={t("description")} />
+    <div className="grid gap-8 lg:grid-cols-[184px_minmax(0,1fr)]">
+      <nav className="overflow-x-auto lg:overflow-visible" aria-label={t("navigationLabel")}>
+        <div className="flex min-w-max gap-1 lg:block lg:min-w-0 lg:space-y-0.5">
+          {SECTIONS.map(({ id, icon: Icon }) => <Link key={id} to={`/settings/${id}`} aria-current={active === id ? "page" : undefined}
+            className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors ${active === id ? "bg-neutral-100 font-medium text-neutral-900 dark:bg-neutral-900 dark:text-white" : "text-neutral-500 hover:bg-neutral-50 hover:text-neutral-900 dark:hover:bg-neutral-900 dark:hover:text-white"}`}>
+            <Icon size={15} strokeWidth={1.8} aria-hidden="true" />{t(`sections.${id}`)}
+          </Link>)}
+        </div>
+      </nav>
+      <div className="min-w-0">{pages[active]}</div>
+    </div>
   </>;
 }
 
+function SectionCard({ title, detail, children }: { title: string; detail: string; children: ReactNode }) {
+  return <Card className="p-5 sm:p-7"><h2 className="text-lg font-semibold tracking-tight">{title}</h2><p className="mt-1 text-sm leading-6 text-neutral-500">{detail}</p>{children}</Card>;
+}
+
 function AccountSettings() {
+  const { t, i18n } = useTranslation("settings");
   const { me, setMe } = useOutletContext<{ me: Me; setMe: (user: Me) => void }>();
-  const [displayName, setDisplayName] = useState(me.displayName);
-  const [number, setNumber] = useState("");
-  const [availability, setAvailability] = useState<boolean | null>(null);
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  async function saveDisplayName(event: FormEvent) {
-    event.preventDefault(); setError(null); setNotice(null);
-    try { const user = await api<Me>("/api/me", { method: "PATCH", body: JSON.stringify({ displayName }) }); setMe(user); setNotice("Display name saved."); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : "Could not save profile."); }
-  }
-  async function checkAvailability() {
-    setError(null); setAvailability(null);
-    try { const result = await api<{ available: boolean }>(`/api/numbers/availability?number=${encodeURIComponent(number.trim())}`); setAvailability(result.available); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : "Could not check number availability."); }
-  }
-  async function claimNumber(event: FormEvent) {
-    event.preventDefault(); setError(null); setNotice(null); setBusy(true);
-    try { await api("/api/numbers", { method: "POST", body: JSON.stringify({ number: number.trim() }) }); const fresh = await api<Me>("/api/me"); setMe(fresh); setNotice("SparkCall number saved."); setAvailability(null); setNumber(""); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : "Could not claim this number."); }
-    finally { setBusy(false); }
-  }
-  async function upgrade(event: FormEvent) {
-    event.preventDefault(); setError(null); setNotice(null); setBusy(true);
-    try { const user = await api<Me>("/api/auth/upgrade", { method: "POST", body: JSON.stringify({ username, password }) }); setMe(user); setNotice("Your temporary identity is now a permanent account. Existing contacts and call records remain on this identity."); setPassword(""); setUsername(""); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : "Could not upgrade the account."); }
-    finally { setBusy(false); }
-  }
-  return <Card className="p-5 sm:p-7"><h2 className="text-lg font-semibold">Account and identity</h2><p className="mt-1 text-sm text-neutral-500">Your SparkCall identity is separate from your login session.</p>
+  const [displayName, setDisplayName] = useState(me.displayName), [number, setNumber] = useState("");
+  const [availability, setAvailability] = useState<boolean | null>(null), [username, setUsername] = useState(""), [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false), [error, setError] = useState<string | null>(null), [notice, setNotice] = useState<string | null>(null);
+  async function saveDisplayName(event: FormEvent) { event.preventDefault(); setError(null); setNotice(null); try { const user = await api<Me>("/api/me", { method: "PATCH", body: JSON.stringify({ displayName }) }); setMe(user); setNotice(t("account.displayNameSaved")); } catch (cause) { setError(messageFor(cause, t, "errors.profile")); } }
+  async function checkAvailability() { setError(null); setAvailability(null); try { const result = await api<{ available: boolean }>(`/api/numbers/availability?number=${encodeURIComponent(number.trim())}`); setAvailability(result.available); } catch (cause) { setError(messageFor(cause, t, "errors.availability")); } }
+  async function claimNumber(event: FormEvent) { event.preventDefault(); setError(null); setNotice(null); setBusy(true); try { await api("/api/numbers", { method: "POST", body: JSON.stringify({ number: number.trim() }) }); setMe(await api<Me>("/api/me")); setNotice(t("account.numberSaved")); setAvailability(null); setNumber(""); } catch (cause) { setError(messageFor(cause, t, "errors.claimNumber")); } finally { setBusy(false); } }
+  async function upgrade(event: FormEvent) { event.preventDefault(); setError(null); setNotice(null); setBusy(true); try { const user = await api<Me>("/api/auth/upgrade", { method: "POST", body: JSON.stringify({ username, password }) }); setMe(user); setNotice(t("account.upgradeSaved")); setPassword(""); setUsername(""); } catch (cause) { setError(messageFor(cause, t, "errors.upgrade")); } finally { setBusy(false); } }
+  return <SectionCard title={t("account.title")} detail={t("account.detail")}>
     {error && <div className="mt-5"><Notice>{error}</Notice></div>}{notice && <div className="mt-5"><Notice tone="success">{notice}</Notice></div>}
-    <form onSubmit={(event) => void saveDisplayName(event)} className="mt-6 grid gap-4 sm:grid-cols-2"><Field label="Display name" maxLength={80} required value={displayName} onChange={(event) => setDisplayName(event.target.value)} /><Field label="Username" value={me.username || "Temporary account"} readOnly /><div className="sm:col-span-2"><Button type="submit">Save display name</Button></div></form>
-    <div className="mt-7 border-t border-neutral-200 pt-6 dark:border-neutral-800"><h3 className="font-medium">SparkCall number</h3><p className="mt-1 text-sm text-neutral-500">Current number: <span className="font-medium text-neutral-900 dark:text-neutral-100">{me.number || "Not claimed"}</span></p>
-      {me.temporary ? <p className="mt-3 text-sm text-neutral-500">Temporary accounts use an automatically generated number and cannot claim a custom number.</p> : <form onSubmit={(event) => void claimNumber(event)} className="mt-4 space-y-3"><Field label="Choose a number" maxLength={32} minLength={3} value={number} onChange={(event) => { setNumber(event.target.value); setAvailability(null); }} placeholder="Letters and numbers only; case-sensitive" />
-        <div className="flex flex-wrap items-center gap-2"><Button type="button" variant="secondary" disabled={number.trim().length < 3} onClick={() => void checkAvailability()}>Check availability</Button><Button type="submit" disabled={busy || !number.trim() || availability !== true}>{busy ? "Saving…" : "Claim number"}</Button>{availability === true && <span className="text-xs text-green-700">Available</span>}{availability === false && <span className="text-xs text-red-600">Unavailable</span>}</div>
-        <p className="text-xs text-neutral-500">Numbers are case-sensitive. You can change your number once every 30 days.</p></form>}
+    <form onSubmit={(event) => void saveDisplayName(event)} className="mt-6 grid gap-4 sm:grid-cols-2"><Field label={t("account.displayName")} maxLength={80} required value={displayName} onChange={(event) => setDisplayName(event.target.value)} /><Field label={t("account.username")} value={me.username || t("account.temporary")} readOnly /><div className="sm:col-span-2"><Button type="submit">{t("actions.saveDisplayName")}</Button></div></form>
+    <div className="mt-7 border-t border-neutral-200 pt-6 dark:border-neutral-800"><h3 className="font-medium">{t("account.numberTitle")}</h3><p className="mt-1 text-sm text-neutral-500">{t("account.currentNumber")} <span className="font-medium text-neutral-900 dark:text-neutral-100">{me.number || t("account.notClaimed")}</span></p>
+      {me.temporary ? <p className="mt-3 text-sm text-neutral-500">{t("account.temporaryNumber")}</p> : <form onSubmit={(event) => void claimNumber(event)} className="mt-4 space-y-3"><Field label={t("account.chooseNumber")} maxLength={32} minLength={3} value={number} onChange={(event) => { setNumber(event.target.value); setAvailability(null); }} placeholder={t("account.numberPlaceholder")} />
+        <div className="flex flex-wrap items-center gap-2"><Button type="button" variant="secondary" disabled={number.trim().length < 3} onClick={() => void checkAvailability()}>{t("actions.checkAvailability")}</Button><Button type="submit" disabled={busy || !number.trim() || availability !== true}>{busy ? t("actions.saving") : t("actions.claimNumber")}</Button>{availability === true && <span className="inline-flex items-center gap-1 text-xs text-green-700"><Check size={13} aria-hidden="true" />{t("account.available")}</span>}{availability === false && <span className="text-xs text-red-600">{t("account.unavailable")}</span>}</div><p className="text-xs text-neutral-500">{t("account.numberCooldown")}</p></form>}
     </div>
-    {me.temporary && <div className="mt-7 border-t border-neutral-200 pt-6 dark:border-neutral-800"><h3 className="font-medium">Upgrade temporary account</h3><p className="mt-1 text-sm text-neutral-500">Create a permanent username and password while preserving this identity and its eligible data.</p><form onSubmit={(event) => void upgrade(event)} className="mt-4 grid gap-3 sm:grid-cols-2"><Field label="Username" autoComplete="username" minLength={3} maxLength={32} required value={username} onChange={(event) => setUsername(event.target.value)} /><Field label="Password" type="password" autoComplete="new-password" minLength={12} maxLength={200} required value={password} onChange={(event) => setPassword(event.target.value)} /><div className="sm:col-span-2"><Button disabled={busy}>Upgrade account</Button></div></form>{me.expiresAt && <p className="mt-3 text-xs text-neutral-500">This temporary account expires {formatDate(me.expiresAt)}.</p>}</div>}
-  </Card>;
+    {me.temporary && <div className="mt-7 border-t border-neutral-200 pt-6 dark:border-neutral-800"><h3 className="font-medium">{t("account.upgradeTitle")}</h3><p className="mt-1 text-sm text-neutral-500">{t("account.upgradeDetail")}</p><form onSubmit={(event) => void upgrade(event)} className="mt-4 grid gap-3 sm:grid-cols-2"><Field label={t("account.username")} autoComplete="username" minLength={3} maxLength={32} required value={username} onChange={(event) => setUsername(event.target.value)} /><Field label={t("account.password")} type="password" autoComplete="new-password" minLength={12} maxLength={200} required value={password} onChange={(event) => setPassword(event.target.value)} /><div className="sm:col-span-2"><Button disabled={busy}>{t("actions.upgrade")}</Button></div></form>{me.expiresAt && <p className="mt-3 text-xs text-neutral-500">{t("account.expires", { date: formatDate(me.expiresAt, i18n.language) })}</p>}</div>}
+  </SectionCard>;
 }
 
 function AudioSettings() {
-  const { preferences, updatePreferences } = useCallSession();
-  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
-  async function refreshDevices() {
-    setError(null);
-    try { const stream = await navigator.mediaDevices.getUserMedia({ audio: true }); stream.getTracks().forEach((track) => track.stop()); setDevices(await navigator.mediaDevices.enumerateDevices()); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : "Could not access audio devices."); }
-  }
-  async function update(patch: Partial<UserPreferences>) {
-    setError(null); setSaved(false);
-    try { await updatePreferences(patch); setSaved(true); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : "Could not save audio preferences."); }
-  }
-  const toggleOptions = [["echoCancellation", "Echo cancellation"], ["noiseSuppression", "Noise suppression"], ["autoGainControl", "Automatic gain control"]] as const;
-  return <Card className="p-5 sm:p-7"><h2 className="text-lg font-semibold">Audio</h2><p className="mt-1 text-sm text-neutral-500">Settings are persisted and used on future calls. Actual audio bitrate can vary with network conditions and codec behavior.</p>
-    {error && <div className="mt-4"><Notice>{error}</Notice></div>}{saved && <div className="mt-4"><Notice tone="success">Audio preferences saved.</Notice></div>}
-    <div className="mt-6 space-y-1">{toggleOptions.map(([key, label]) => <label key={key} className="flex items-center justify-between border-b border-neutral-100 py-4 text-sm dark:border-neutral-900"><span>{label}</span><input type="checkbox" checked={preferences[key]} onChange={(event) => void update({ [key]: event.target.checked })} /></label>)}</div>
-    <div className="mt-6"><div className="flex items-center justify-between"><h3 className="text-sm font-medium">Audio devices</h3><Button variant="secondary" onClick={() => void refreshDevices()}>Refresh devices</Button></div>
-      <div className="mt-4 grid gap-4 sm:grid-cols-2"><label className="text-sm">Microphone<select value={preferences.audioInputDeviceId} onChange={(event) => void update({ audioInputDeviceId: event.target.value })} className="focus-ring mt-1.5 block w-full rounded-md border border-neutral-200 bg-transparent px-3 py-2 text-sm dark:border-neutral-800"><option value="">System default</option>{devices.filter((device) => device.kind === "audioinput").map((device) => <option key={device.deviceId} value={device.deviceId}>{device.label || "Microphone"}</option>)}</select></label>
-        <label className="text-sm">Speaker<select value={preferences.audioOutputDeviceId} onChange={(event) => void update({ audioOutputDeviceId: event.target.value })} className="focus-ring mt-1.5 block w-full rounded-md border border-neutral-200 bg-transparent px-3 py-2 text-sm dark:border-neutral-800"><option value="">System default</option>{devices.filter((device) => device.kind === "audiooutput").map((device) => <option key={device.deviceId} value={device.deviceId}>{device.label || "Speaker"}</option>)}</select></label></div>
-      <p className="mt-2 text-xs text-neutral-500">Device names appear after you grant microphone access. Speaker switching depends on browser support.</p>
-    </div>
-    <div className="mt-6 grid gap-4 border-t border-neutral-200 pt-6 dark:border-neutral-800 sm:grid-cols-2"><label className="text-sm">Outgoing bitrate target<select value={preferences.bitrateMode} onChange={(event) => void update({ bitrateMode: event.target.value as UserPreferences["bitrateMode"] })} className="focus-ring mt-1.5 block w-full rounded-md border border-neutral-200 bg-transparent px-3 py-2 text-sm dark:border-neutral-800"><option value="low">Low · 16 kbps</option><option value="standard">Standard · 32 kbps</option><option value="high">High · 64 kbps</option><option value="custom">Custom</option></select></label>
-      {preferences.bitrateMode === "custom" && <Field label="Custom target (6–128 kbps)" type="number" min={6} max={128} value={preferences.bitrateKbps} onChange={(event) => void update({ bitrateKbps: Number(event.target.value) })} />}</div>
-  </Card>;
+  const { t } = useTranslation("settings"); const { preferences, updatePreferences } = useCallSession(); const [devices, setDevices] = useState<MediaDeviceInfo[]>([]); const [error, setError] = useState<string | null>(null); const [saved, setSaved] = useState(false);
+  async function refreshDevices() { setError(null); try { const stream = await navigator.mediaDevices.getUserMedia({ audio: true }); stream.getTracks().forEach((track) => track.stop()); setDevices(await navigator.mediaDevices.enumerateDevices()); } catch (cause) { setError(messageFor(cause, t, "errors.audioAccess")); } }
+  async function update(patch: Partial<UserPreferences>) { setError(null); setSaved(false); try { await updatePreferences(patch); setSaved(true); } catch (cause) { setError(messageFor(cause, t, "errors.audioSave")); } }
+  const toggles: Array<[keyof Pick<UserPreferences, "echoCancellation" | "noiseSuppression" | "autoGainControl">, string]> = [["echoCancellation", "audio.echoCancellation"], ["noiseSuppression", "audio.noiseSuppression"], ["autoGainControl", "audio.autoGainControl"]];
+  return <SectionCard title={t("audio.title")} detail={t("audio.detail")}>{error && <div className="mt-4"><Notice>{error}</Notice></div>}{saved && <div className="mt-4"><Notice tone="success">{t("audio.saved")}</Notice></div>}<div className="mt-6">{toggles.map(([key, label]) => <label key={key} className="flex items-center justify-between gap-4 border-b border-neutral-100 py-4 text-sm dark:border-neutral-900"><span>{t(label)}</span><input aria-label={t(label)} type="checkbox" checked={preferences[key]} onChange={(event) => void update({ [key]: event.target.checked })} /></label>)}</div>
+    <div className="mt-6"><div className="flex flex-wrap items-center justify-between gap-3"><h3 className="text-sm font-medium">{t("audio.devicesTitle")}</h3><Button variant="secondary" onClick={() => void refreshDevices()}><RefreshCw size={14} aria-hidden="true" />{t("actions.refreshDevices")}</Button></div><div className="mt-4 grid gap-4 sm:grid-cols-2"><SelectField label={t("audio.microphone")} ariaLabel={t("audio.microphone")} value={preferences.audioInputDeviceId} onChange={(value) => void update({ audioInputDeviceId: value })}><option value="">{t("audio.systemDefault")}</option>{devices.filter((device) => device.kind === "audioinput").map((device) => <option key={device.deviceId} value={device.deviceId}>{device.label || t("audio.microphone")}</option>)}</SelectField><SelectField label={t("audio.speaker")} ariaLabel={t("audio.speaker")} value={preferences.audioOutputDeviceId} onChange={(value) => void update({ audioOutputDeviceId: value })}><option value="">{t("audio.systemDefault")}</option>{devices.filter((device) => device.kind === "audiooutput").map((device) => <option key={device.deviceId} value={device.deviceId}>{device.label || t("audio.speaker")}</option>)}</SelectField></div><p className="mt-2 text-xs text-neutral-500">{t("audio.devicesDetail")}</p></div>
+    <div className="mt-6 grid gap-4 border-t border-neutral-200 pt-6 dark:border-neutral-800 sm:grid-cols-2"><SelectField label={t("audio.bitrate")} ariaLabel={t("audio.bitrate")} value={preferences.bitrateMode} onChange={(value) => void update({ bitrateMode: value as UserPreferences["bitrateMode"] })}><option value="low">{t("audio.low")}</option><option value="standard">{t("audio.standard")}</option><option value="high">{t("audio.high")}</option><option value="custom">{t("audio.custom")}</option></SelectField>{preferences.bitrateMode === "custom" && <Field label={t("audio.customTarget")} type="number" min={6} max={128} value={preferences.bitrateKbps} onChange={(event) => void update({ bitrateKbps: Number(event.target.value) })} />}</div>
+  </SectionCard>;
 }
 
-function PrivacySettings() {
-  const { preferences, updatePreferences } = useCallSession();
-  const [error, setError] = useState<string | null>(null);
-  async function update(patch: Partial<UserPreferences>) { setError(null); try { await updatePreferences(patch); } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not save privacy preferences."); } }
-  return <Card className="p-5 sm:p-7"><h2 className="text-lg font-semibold">Privacy</h2><p className="mt-1 text-sm text-neutral-500">Call audio is not recorded. Blocking and incoming-call settings are enforced by the server.</p>
-    {error && <div className="mt-4"><Notice>{error}</Notice></div>}
-    <div className="mt-6">{([["allowIncoming", "Allow incoming calls", "Declined calls are rejected before WebRTC setup."], ["showOnlineStatus", "Show online status", "Controls whether presence may be shared by future public-facing features."]] as const).map(([key, title, detail]) => <label key={key} className="flex items-start justify-between gap-4 border-b border-neutral-100 py-4 last:border-0 dark:border-neutral-900"><span><span className="block text-sm font-medium">{title}</span><span className="mt-1 block text-xs text-neutral-500">{detail}</span></span><input type="checkbox" checked={preferences[key]} onChange={(event) => void update({ [key]: event.target.checked })} /></label>)}</div>
-  </Card>;
-}
+function SelectField({ label, ariaLabel, children, ...props }: { label: string; ariaLabel: string; value: string; onChange: (value: string) => void; children: ReactNode }) { return <label className="text-sm"><span className="mb-1.5 block font-medium text-neutral-700 dark:text-neutral-300">{label}</span><select aria-label={ariaLabel} value={props.value} onChange={(event) => props.onChange(event.target.value)} className="focus-ring block w-full rounded-md border border-neutral-200 bg-transparent px-3 py-2 text-sm dark:border-neutral-800">{children}</select></label>; }
 
-function UsageSettings() {
-  const resource = useResource<Usage>("/api/usage");
-  const usage = resource.data;
-  const platform = useResource<{ available: boolean; month: string; usedBytes: number | null; lastUpdated: string | null }>("/api/admin/usage");
-  return <Card className="p-5 sm:p-7"><h2 className="text-lg font-semibold">TURN usage</h2><p className="mt-1 text-sm text-neutral-500">Monthly relay usage from Cloudflare Realtime analytics. Sampled analytics may not equal final billing data.</p>
-    {resource.loading ? <p className="mt-6 text-sm text-neutral-500">Loading usage…</p> : resource.error ? <div className="mt-4"><Notice>{resource.error}</Notice></div> : !usage?.available ? <div className="mt-5 rounded-md border border-neutral-200 p-4 text-sm text-neutral-500 dark:border-neutral-800">Usage reporting is not configured or the analytics service returned no data. Calls can still work when TURN credentials are configured.</div> : <>
-      <div className="mt-6 grid gap-4 sm:grid-cols-3"><Metric label="Monthly usage" value={formatBytes(usage.usedBytes)} /><Metric label="Quota" value={formatBytes(usage.quotaBytes)} /><Metric label="Remaining" value={formatBytes(usage.remainingBytes)} /></div>
-      {usage.percentageUsed != null && <div className="mt-6"><div className="flex justify-between text-xs text-neutral-500"><span>Quota used</span><span>{usage.percentageUsed.toFixed(1)}%</span></div><div className="mt-2 h-2 rounded bg-neutral-100 dark:bg-neutral-900"><div className="h-2 rounded bg-neutral-900 dark:bg-neutral-100" style={{ width: `${Math.max(0, Math.min(100, usage.percentageUsed))}%` }} /></div></div>}
-      <dl className="mt-6 grid gap-4 border-t border-neutral-200 pt-5 text-sm dark:border-neutral-800 sm:grid-cols-2"><div><dt className="text-xs text-neutral-500">Month</dt><dd className="mt-1">{usage.month}</dd></div><div><dt className="text-xs text-neutral-500">Last updated</dt><dd className="mt-1">{formatDate(usage.lastUpdated)}</dd></div><div><dt className="text-xs text-neutral-500">Data source</dt><dd className="mt-1">{usage.source}</dd></div><div><dt className="text-xs text-neutral-500">Accounting</dt><dd className="mt-1">{usage.authoritative ? "Authoritative" : "Estimated / sampled"}</dd></div></dl><p className="mt-4 text-xs leading-5 text-neutral-500">{usage.note}</p>
-    </>}
-    {platform.data?.available && <div className="mt-7 border-t border-neutral-200 pt-5 dark:border-neutral-800"><h3 className="text-sm font-medium">Platform total · authorized administrators</h3><div className="mt-3 grid gap-4 sm:grid-cols-3"><Metric label="Month" value={platform.data.month} /><Metric label="TURN egress" value={formatBytes(platform.data.usedBytes)} /><Metric label="Last updated" value={formatDate(platform.data.lastUpdated)} /></div><p className="mt-3 text-xs text-neutral-500">Aggregate values are sampled estimates, not authoritative billing totals.</p></div>}
-  </Card>;
-}
-function Metric({ label, value }: { label: string; value: string }) { return <div className="rounded-md border border-neutral-200 p-4 dark:border-neutral-800"><p className="text-xs text-neutral-500">{label}</p><p className="mt-2 text-xl font-semibold">{value}</p></div>; }
+function PrivacySettings() { const { t } = useTranslation("settings"); const { preferences, updatePreferences } = useCallSession(); const [error, setError] = useState<string | null>(null); async function update(patch: Partial<UserPreferences>) { setError(null); try { await updatePreferences(patch); } catch (cause) { setError(messageFor(cause, t, "errors.privacySave")); } } const options: Array<[keyof Pick<UserPreferences, "allowIncoming" | "showOnlineStatus">, string, string]> = [["allowIncoming", "privacy.allowIncoming", "privacy.allowIncomingDetail"], ["showOnlineStatus", "privacy.showOnlineStatus", "privacy.showOnlineStatusDetail"]]; return <SectionCard title={t("privacy.title")} detail={t("privacy.detail")}>{error && <div className="mt-4"><Notice>{error}</Notice></div>}<div className="mt-6">{options.map(([key, title, detail]) => <label key={key} className="flex items-start justify-between gap-4 border-b border-neutral-100 py-4 last:border-0 dark:border-neutral-900"><span><span className="block text-sm font-medium">{t(title)}</span><span className="mt-1 block text-xs leading-5 text-neutral-500">{t(detail)}</span></span><input type="checkbox" aria-label={t(title)} checked={preferences[key]} onChange={(event) => void update({ [key]: event.target.checked })} /></label>)}</div></SectionCard>; }
 
-function AppearanceSettings() {
-  const { preferences, updatePreferences } = useCallSession();
-  const [error, setError] = useState<string | null>(null);
-  async function setTheme(theme: UserPreferences["theme"]) { setError(null); try { await updatePreferences({ theme }); } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not save appearance preference."); } }
-  return <Card className="p-5 sm:p-7"><h2 className="text-lg font-semibold">Appearance</h2><p className="mt-1 text-sm text-neutral-500">Choose light, dark, or follow your system preference.</p>{error && <div className="mt-4"><Notice>{error}</Notice></div>}<label className="mt-6 block max-w-sm text-sm">Theme<select value={preferences.theme} onChange={(event) => void setTheme(event.target.value as UserPreferences["theme"])} className="focus-ring mt-1.5 block w-full rounded-md border border-neutral-200 bg-transparent px-3 py-2 dark:border-neutral-800"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label></Card>;
-}
+function NotificationsSettings() { const { t } = useTranslation("settings"); return <SectionCard title={t("notifications.title")} detail={t("notifications.detail")}><div className="mt-6"><Empty title={t("notifications.emptyTitle")} detail={t("notifications.emptyDetail")} /></div></SectionCard>; }
+
+function UsageSettings() { const { t, i18n } = useTranslation("settings"); const resource = useResource<Usage>("/api/usage"), usage = resource.data; const platform = useResource<{ available: boolean; month: string; usedBytes: number | null; lastUpdated: string | null }>("/api/admin/usage"); const bytes = (value: number | null | undefined) => formatBytes(value) === "Unavailable" ? t("usage.unavailableValue") : formatBytes(value); return <SectionCard title={t("usage.title")} detail={t("usage.detail")}>{resource.loading ? <p className="mt-6 text-sm text-neutral-500" role="status">{t("states.loading")}</p> : resource.error ? <div className="mt-4"><Notice>{t("errors.usage", { code: resource.error })}</Notice></div> : !usage?.available ? <div className="mt-5 rounded-md border border-neutral-200 p-4 text-sm leading-6 text-neutral-500 dark:border-neutral-800">{t("usage.unavailable")}</div> : <><div className="mt-6 grid gap-3 sm:grid-cols-3"><Metric label={t("usage.monthly")} value={bytes(usage.usedBytes)} /><Metric label={t("usage.quota")} value={bytes(usage.quotaBytes)} /><Metric label={t("usage.remaining")} value={bytes(usage.remainingBytes)} /></div>{usage.percentageUsed != null && <div className="mt-6"><div className="flex justify-between text-xs text-neutral-500"><span>{t("usage.quotaUsed")}</span><span>{usage.percentageUsed.toFixed(1)}%</span></div><div className="mt-2 h-2 rounded bg-neutral-100 dark:bg-neutral-900"><div className="h-2 rounded bg-neutral-900 dark:bg-neutral-100" style={{ width: `${Math.max(0, Math.min(100, usage.percentageUsed))}%` }} /></div></div>}<dl className="mt-6 grid gap-4 border-t border-neutral-200 pt-5 text-sm dark:border-neutral-800 sm:grid-cols-2"><Data label={t("usage.month")} value={usage.month} /><Data label={t("usage.lastUpdated")} value={formatDate(usage.lastUpdated, i18n.language)} /><Data label={t("usage.source")} value={usage.source} /><Data label={t("usage.accounting")} value={usage.authoritative ? t("usage.authoritative") : t("usage.estimated")} /></dl><p className="mt-4 text-xs leading-5 text-neutral-500">{usage.note}</p>{platform.data?.available && <div className="mt-7 border-t border-neutral-200 pt-5 dark:border-neutral-800"><h3 className="text-sm font-medium">{t("usage.platformTitle")}</h3><div className="mt-3 grid gap-4 sm:grid-cols-3"><Metric label={t("usage.month")} value={platform.data.month} /><Metric label={t("usage.egress")} value={bytes(platform.data.usedBytes)} /><Metric label={t("usage.lastUpdated")} value={formatDate(platform.data.lastUpdated, i18n.language)} /></div><p className="mt-3 text-xs text-neutral-500">{t("usage.platformDetail")}</p></div>}</>}
+  </SectionCard>; }
+function Metric({ label, value }: { label: string; value: string }) { return <div className="border border-neutral-200 p-4 dark:border-neutral-800"><p className="text-xs text-neutral-500">{label}</p><p className="mt-2 text-xl font-semibold">{value}</p></div>; }
+function Data({ label, value }: { label: string; value: string }) { return <div><dt className="text-xs text-neutral-500">{label}</dt><dd className="mt-1 break-words">{value}</dd></div>; }
+
+function AppearanceSettings() { const { t } = useTranslation("settings"); const { preferences, updatePreferences } = useCallSession(); const [error, setError] = useState<string | null>(null); async function setTheme(theme: UserPreferences["theme"]) { setError(null); try { await updatePreferences({ theme }); } catch (cause) { setError(messageFor(cause, t, "errors.appearanceSave")); } } return <SectionCard title={t("appearance.title")} detail={t("appearance.detail")}>{error && <div className="mt-4"><Notice>{error}</Notice></div>}<div className="mt-6 max-w-sm"><SelectField label={t("appearance.theme")} ariaLabel={t("appearance.theme")} value={preferences.theme} onChange={(value) => void setTheme(value as UserPreferences["theme"])}><option value="system">{t("appearance.system")}</option><option value="light">{t("appearance.light")}</option><option value="dark">{t("appearance.dark")}</option></SelectField></div></SectionCard>; }

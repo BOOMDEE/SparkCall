@@ -1,0 +1,44 @@
+name: Feature request
+description: Suggest an improvement to SparkCall
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the user need and proposed behavior. Do not include credentials, personal data, call recordings, call metadata, or private conversation content.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: What problem would this solve, and who would benefit?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What would you like SparkCall to do?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What workarounds or alternative designs have you tried?
+  - type: input
+    id: version
+    attributes:
+      label: Version or context
+      description: Which version or deployment context is this request for?
+      placeholder: "0.1.0 or preproduction"
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I have searched existing issues for duplicates.
+          required: true
+        - label: I have removed sensitive data from this request.
+          required: true

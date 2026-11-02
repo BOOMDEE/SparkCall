@@ -1,0 +1,16 @@
+{
+  "header": { "homeAria": "SparkCall home", "ownerEyebrow": "Private owner view", "publicEyebrow": "Public call record" },
+  "actions": { "copyLinkAria": "Copy public record link", "copyLink": "Copy link", "copied": "Copied", "myRecords": "My records", "close": "Close", "edit": "Edit", "saving": "Saving…", "save": "Save changes", "viewPublic": "View public page", "deleteAria": "Delete this record" },
+  "status": { "public": "Public", "private": "Private", "expired": "Expired" },
+  "privacy": { "ownerAccess": "Owner management is available through your signed-in session or the secure HttpOnly recovery capability.", "publicAccess": "Anyone with this URL can read the fields the owner chose to publish. Call audio is never stored." },
+  "expiry": { "expires": "This record expires {{date}}.", "expired": "This record expired on {{date}}." },
+  "fields": { "identifier": "Public identifier", "duration": "Call duration", "started": "Started", "ended": "Ended", "title": "Title", "slug": "Public URL slug", "description": "Description", "notes": "Notes", "tags": "Tags (comma-separated)", "expiresAt": "Expiration (optional)", "metadata": "Custom metadata (JSON object)" },
+  "values": { "notLinked": "Not linked to a call" },
+  "sections": { "participants": "Participants", "tags": "Record tags", "notes": "Notes", "details": "Additional details" },
+  "record": { "noDescription": "No description was provided." },
+  "owner": { "title": "Manage this record", "detail": "Publishing, visibility, expiration, slug, and content changes apply to this record. Participant names should only be published with consent.", "updated": "Last updated {{date}}" },
+  "consent": { "publicActive": "Allow anyone with the URL to view this record", "keepPrivate": "Keep this record private", "publicWarning": "Publishing makes this record and its participant information available at its public URL. Confirm participant consent before saving.", "privateNote": "This record remains private until you explicitly publish it." },
+  "notices": { "updated": "Record updated. A changed slug now uses its new public URL." },
+  "errors": { "load": "Could not load this record: {{detail}}", "privateTitle": "This record is private or does not exist.", "privateDetail": "Only the owner session or a browser holding the record’s secure recovery capability can open a private record.", "invalidMetadata": "Custom metadata must be valid JSON.", "updateFailed": "Could not update this record", "deleteFailed": "Could not delete this record" },
+  "confirm": { "publish": "Publish this record? Its contents and participant information will be available at the public URL after you confirm.", "revoke": "Revoke public access? This record will become private and the public URL will stop working.", "delete": "Delete {{title}}? This cannot be undone." }
+}

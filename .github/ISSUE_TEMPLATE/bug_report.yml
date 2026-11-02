@@ -1,0 +1,61 @@
+name: Bug report
+description: Report a reproducible problem in SparkCall
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before submitting, search existing issues. Never include credentials, tokens, personal data, call recordings, call metadata, or private conversation content.
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: Which release, commit, or deployment were you using?
+      placeholder: "0.1.0 or abc1234"
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Give the smallest complete set of steps, including relevant setup or test commands.
+      placeholder: |
+        1. Configure ...
+        2. Run ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include OS, browser, runtime, and relevant configuration. Remove secrets.
+      placeholder: "OS / browser / Node.js version / deployment context"
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Logs or screenshots
+      description: Optional. Sanitize credentials, tokens, personal data, and private call information before posting.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I have removed sensitive data from this report.
+          required: true
+        - label: I have searched existing issues and can reproduce this problem.
+          required: true

@@ -91,6 +91,16 @@ describe("session cookies and authentication", () => {
     await revokeSession(new Request("https://example.test", { headers: { Cookie: "sc_session=token" } }), revocation as any);
     expect(revocation.prepared.bind).toHaveBeenCalledWith(expect.stringMatching(/^[0-9a-f]{64}$/));
   });
+
+  it("does not hide D1 lookup or delete failures during logout", async () => {
+    const lookupFailure = envWithDb();
+    lookupFailure.prepared.first.mockRejectedValueOnce(new Error("D1 unavailable"));
+    await expect(revokeSession(new Request("https://example.test", { headers: { Cookie: "sc_session=token" } }), lookupFailure as any)).rejects.toThrow("D1 unavailable");
+
+    const deleteFailure = envWithDb({ id: "s1", user_id: "u1" });
+    deleteFailure.prepared.run.mockRejectedValueOnce(new Error("D1 delete unavailable"));
+    await expect(revokeSession(new Request("https://example.test", { headers: { Cookie: "sc_session=token" } }), deleteFailure as any)).rejects.toThrow("D1 delete unavailable");
+  });
 });
 
 describe("login rate limiting", () => {

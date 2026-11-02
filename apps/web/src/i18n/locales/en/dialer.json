@@ -1,0 +1,81 @@
+{
+  "eyebrow": "Browser calling",
+  "title": "Dialer",
+  "detail": "Start a private browser call with a SparkCall number. Your microphone is requested only when audio is needed.",
+  "sections": {
+    "placeCall": "Place a call",
+    "currentCall": "Current call",
+    "callStatus": "Call status"
+  },
+  "form": {
+    "prompt": "Who do you want to call?",
+    "numberLabel": "SparkCall number",
+    "numberPlaceholder": "For example: SC888",
+    "numberHint": "Numbers are case-sensitive. Enter the recipient’s exact SparkCall number.",
+    "privacyNote": "Audio stays between callers through encrypted WebRTC.",
+    "call": "Call",
+    "connecting": "Connecting…"
+  },
+  "identity": {
+    "incomingCaller": "Incoming caller",
+    "outgoingCall": "Outgoing call",
+    "incomingCall": "Incoming call"
+  },
+  "states": {
+    "idle": "Ready to call",
+    "calling": "Calling…",
+    "ringing": "Ringing…",
+    "connecting": "Establishing secure audio…",
+    "connected": "Connected",
+    "ended": "Call ended",
+    "rejected": "Call declined",
+    "busy": "Recipient is busy",
+    "timeout": "Call timed out",
+    "failed": "Call failed",
+    "cancelled": "Call cancelled"
+  },
+  "actions": {
+    "mute": "Mute",
+    "unmute": "Unmute",
+    "cancel": "Cancel",
+    "hangUp": "Hang up",
+    "refreshDevices": "Refresh devices"
+  },
+  "audio": {
+    "title": "Audio devices",
+    "detail": "Choose the microphone and speaker used for this browser call.",
+    "microphone": "Microphone",
+    "speaker": "Speaker",
+    "systemDefault": "System default",
+    "microphoneOption": "Microphone",
+    "speakerOption": "Speaker",
+    "supportNote": "Speaker selection depends on browser support. Bitrate is a target; network and codec behavior can change the actual rate."
+  },
+  "status": {
+    "eyebrow": "Live details",
+    "presence": "Presence",
+    "state": "Call state",
+    "connection": "WebRTC connection",
+    "duration": "Duration",
+    "online": "Connected",
+    "offline": "Reconnecting",
+    "connectionStates": {
+      "new": "New",
+      "connecting": "Connecting",
+      "connected": "Connected",
+      "disconnected": "Disconnected",
+      "failed": "Failed",
+      "closed": "Closed"
+    },
+    "webrtcNote": "Calls use WebRTC. Cloudflare TURN credentials are fetched server-side and are never exposed as long-lived account credentials.",
+    "failureHint": "If the connection fails, confirm TURN credentials are configured for this deployment and try again."
+  },
+  "errors": {
+    "missingNumber": "Enter a SparkCall number before calling.",
+    "callFailed": "Could not start the call. {{detail}}",
+    "audioDevicesFailed": "Could not access audio devices. {{detail}}",
+    "microphoneFailed": "Could not change microphone. {{detail}}",
+    "speakerFailed": "Speaker selection is not available in this browser. {{detail}}",
+    "session": "Call service error. {{detail}}"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "brand": { "name": "SparkCall", "homeLabel": "SparkCall 首页" },
+  "navigation": { "label": "主导航", "overview": "概览", "dialer": "拨号台", "contacts": "联系人", "history": "历史记录", "records": "通话记录", "blocked": "已屏蔽", "settings": "设置" },
+  "actions": { "openNavigation": "打开导航", "closeNavigation": "关闭导航", "switchToLight": "切换到浅色模式", "switchToDark": "切换到深色模式", "signOut": "退出登录", "openDialer": "打开拨号台", "dismissError": "关闭错误提示" },
+  "status": { "online": "在线", "offline": "离线", "workspace": "工作区" },
+  "identity": { "noNumber": "尚未领取号码", "temporary": "临时账号", "permanent": "SparkCall 身份", "expires": "过期时间：{{date}}" },
+  "call": { "controls": "当前通话控制", "incomingCaller": "来电者", "outgoing": "拨出通话", "mute": "静音通话", "unmute": "取消通话静音", "cancel": "取消通话", "hangUp": "挂断通话", "states": { "RINGING": "响铃中", "CONNECTING": "连接中", "CONNECTED": "已接通", "ENDING": "结束中", "IDLE": "空闲", "ENDED": "已结束", "REJECTED": "已拒绝", "BUSY": "忙线", "TIMEOUT": "已超时", "FAILED": "失败", "CANCELLED": "已取消" } },
+  "errors": { "session": "通话会话错误：{{detail}}" },
+  "notFound": { "eyebrow": "404 · 页面不存在", "title": "此页面不存在。", "detail": "请检查地址，或返回 SparkCall。", "home": "首页" },
+  "footer": { "attribution": "Design with ❤️ by @BOOMDEE", "license": "SparkCall · 基于 Apache-2.0 开源" },
+  "loading": "正在加载工作区…",
+  "languageLabel": "语言",
+  "resource": { "loading": "正在加载…", "emptyTitle": "目前还没有内容", "emptyDetail": "有活动后，数据会显示在这里。" },
+  "authPrompt": { "notAuthenticated": "当前会话尚未登录。", "signIn": "登录" }
+}

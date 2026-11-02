@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Button, Empty, Notice } from "./ui";
+import { useTranslation } from "react-i18next";
 
 export function PageHeader({ eyebrow, title, detail, action }: { eyebrow?: string; title: string; detail?: string; action?: ReactNode }) {
   return <div className="mb-7 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
@@ -11,12 +12,17 @@ export function PageHeader({ eyebrow, title, detail, action }: { eyebrow?: strin
   </div>;
 }
 
-export function ResourceState({ loading, error, empty, children, emptyTitle = "Nothing here yet", emptyDetail = "Data will appear once there is activity." }: {
+export function ContentContainer({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return <div className={`mx-auto w-full max-w-[1200px] ${className}`}>{children}</div>;
+}
+
+export function ResourceState({ loading, error, empty, children, emptyTitle, emptyDetail }: {
   loading: boolean; error: string | null; empty?: boolean; children: ReactNode; emptyTitle?: string; emptyDetail?: string;
 }) {
-  if (loading) return <div className="py-8 text-sm text-neutral-500" role="status">Loading…</div>;
+  const { t } = useTranslation("common");
+  if (loading) return <div className="py-8 text-sm text-neutral-500" role="status">{t("resource.loading")}</div>;
   if (error) return <Notice>{error}</Notice>;
-  if (empty) return <Empty title={emptyTitle} detail={emptyDetail} />;
+  if (empty) return <Empty title={emptyTitle || t("resource.emptyTitle")} detail={emptyDetail || t("resource.emptyDetail")} />;
   return <>{children}</>;
 }
 
@@ -31,5 +37,6 @@ export function StatusPill({ children, tone = "neutral" }: { children: ReactNode
 }
 
 export function AuthPrompt() {
-  return <div className="space-y-4"><Notice>Your session is not authenticated.</Notice><Link to="/login"><Button>Sign in</Button></Link></div>;
+  const { t } = useTranslation("common");
+  return <div className="space-y-4"><Notice>{t("authPrompt.notAuthenticated")}</Notice><Link to="/login"><Button>{t("authPrompt.signIn")}</Button></Link></div>;
 }

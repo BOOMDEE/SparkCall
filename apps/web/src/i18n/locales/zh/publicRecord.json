@@ -1,0 +1,16 @@
+{
+  "header": { "homeAria": "SparkCall 首页", "ownerEyebrow": "私密所有者视图", "publicEyebrow": "公开通话记录" },
+  "actions": { "copyLinkAria": "复制公开记录链接", "copyLink": "复制链接", "copied": "已复制", "myRecords": "我的记录", "close": "关闭", "edit": "编辑", "saving": "保存中…", "save": "保存更改", "viewPublic": "查看公开页面", "deleteAria": "删除此记录" },
+  "status": { "public": "公开", "private": "私密", "expired": "已过期" },
+  "privacy": { "ownerAccess": "可通过已登录会话或安全的 HttpOnly 恢复能力进行所有者管理。", "publicAccess": "拥有此 URL 的任何人都可以阅读所有者选择公开的字段。记录永远不会存储通话音频。" },
+  "expiry": { "expires": "此记录将于 {{date}} 过期。", "expired": "此记录已于 {{date}} 过期。" },
+  "fields": { "identifier": "公开标识符", "duration": "通话时长", "started": "开始时间", "ended": "结束时间", "title": "标题", "slug": "公开 URL slug", "description": "描述", "notes": "备注", "tags": "标签（用逗号分隔）", "expiresAt": "过期时间（可选）", "metadata": "自定义元数据（JSON 对象）" },
+  "values": { "notLinked": "未关联通话" },
+  "sections": { "participants": "参与者", "tags": "记录标签", "notes": "备注", "details": "其他详情" },
+  "record": { "noDescription": "未提供描述。" },
+  "owner": { "title": "管理此记录", "detail": "公开状态、可见性、过期时间、slug 和内容变更都会应用于此记录。只有获得同意后才应公开参与者姓名。", "updated": "最后更新于 {{date}}" },
+  "consent": { "publicActive": "允许任何拥有 URL 的人查看此记录", "keepPrivate": "保持此记录私密", "publicWarning": "公开后，此记录及参与者信息会通过公开 URL 可见。保存前请确认参与者同意。", "privateNote": "在你明确公开前，此记录会保持私密。" },
+  "notices": { "updated": "记录已更新。slug 变更后会使用新的公开 URL。" },
+  "errors": { "load": "无法加载此记录：{{detail}}", "privateTitle": "此记录为私密记录或不存在。", "privateDetail": "只有所有者会话或持有记录安全恢复能力的浏览器才能打开私密记录。", "invalidMetadata": "自定义元数据必须是有效 JSON。", "updateFailed": "无法更新此记录", "deleteFailed": "无法删除此记录" },
+  "confirm": { "publish": "要公开此记录吗？确认后，其内容和参与者信息会通过公开 URL 可见。", "revoke": "要撤销公开访问吗？此记录会变为私密，公开 URL 将停止工作。", "delete": "确定删除 {{title}} 吗？此操作无法撤销。" }
+}
