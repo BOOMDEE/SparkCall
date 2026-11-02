@@ -123,7 +123,7 @@ export class SparkCallDurableObject extends DurableObject<SignalingEnv> {
       return;
     }
     if (parsed.type === "connected") {
-      if (record.status === "CONNECTING" || record.status === "RINGING") {
+      if (record.status === "CONNECTING") {
         record.status = "CONNECTED";
         record.connectedAt = record.connectedAt ?? nowMs;
         record.disconnectedAt = {};

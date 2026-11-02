@@ -38,7 +38,7 @@ async function createCall(request: Request, env: Env): Promise<Response> {
   const active = await env.DB.prepare(`
     SELECT 1 FROM call_history
     WHERE (caller_id=?1 OR recipient_id=?1 OR caller_id=?2 OR recipient_id=?2)
-      AND (status='connected' OR (status IN (${ACTIVE}) AND started_at>datetime('now','-2 minutes')))
+      AND (status='connected' OR (status IN (${ACTIVE}) AND julianday(started_at)>julianday('now','-2 minutes')))
     LIMIT 1
   `).bind(caller.id, callee.id).first();
   if (active) return error("One of the users is already on a call", 409, "USER_BUSY");
@@ -109,7 +109,10 @@ export async function handleRealtimeApi(request: Request, env: Env): Promise<Res
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, "") || "/";
   try {
-    if (path === "/api/calls" && request.method === "POST") return await createCall(request, env);
+    if (path === "/api/calls" && request.method === "POST") {
+      if (!isSameOrigin(request, env)) return error("Cross-site request rejected", 403, "CSRF");
+      return await createCall(request, env);
+    }
     const cancelMatch = path.match(/^\/api\/calls\/([^/]+)\/cancel$/);
     if (cancelMatch && request.method === "POST") {
       if (!isSameOrigin(request, env)) return error("Cross-site request rejected", 403, "CSRF");
