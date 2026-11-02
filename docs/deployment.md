@@ -9,7 +9,7 @@
 
 ## 一次性准备
 
-1. 使用具有 **Workers Scripts Edit**、**D1 Edit**、**Workers Routes/Custom Domains Edit** 与 **Calls Write** 的最小权限 Cloudflare API token，或从手动工作流选择设备授权。
+1. GitHub Actions API token 仅授予目标 Cloudflare 账号的 **Workers Scripts: Edit** 和 **D1: Edit**，用于本工作流的 Worker 部署与 D1 migrations；不要把 TURN key 管理权限混入日常部署 token。也可从手动工作流选择设备授权。
 2. 在 Cloudflare Worker secrets 中设置：
    - `SPARKCALL_INTERNAL_TOKEN`：至少 32 个随机字节；仅用于 Worker 到 Durable Object 的内部身份校验。
    - `TURN_KEY_ID`：Cloudflare Realtime TURN key 的 UID。
