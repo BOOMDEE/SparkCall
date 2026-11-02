@@ -6,7 +6,10 @@ const SESSION_COOKIE = "sc_session";
 const SESSION_MAX = 60 * 60 * 24 * 30;
 
 const b64 = (a: Uint8Array) => base64url(a);
-const fromB64 = (s: string) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/") + "==="), (c) => c.charCodeAt(0));
+const fromB64 = (s: string) => {
+  const normalized = s.replace(/-/g, "+").replace(/_/g, "/");
+  return Uint8Array.from(atob(normalized + "=".repeat((4 - normalized.length % 4) % 4)), (c) => c.charCodeAt(0));
+};
 async function digest(input: string) {
   return new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input)));
 }
@@ -73,8 +76,8 @@ export async function authenticate(request: Request, env: Env) {
     SELECT u.*, s.id AS session_id
     FROM sessions s JOIN users u ON u.id=s.user_id
     WHERE s.token_hash=?1 AND s.revoked_at IS NULL
-      AND s.expires_at > datetime('now')
-      AND (u.expires_at IS NULL OR u.expires_at > datetime('now'))
+      AND julianday(s.expires_at) > julianday('now')
+      AND (u.expires_at IS NULL OR julianday(u.expires_at) > julianday('now'))
   `).bind(await hashToken(token)).first<any>();
 }
 
