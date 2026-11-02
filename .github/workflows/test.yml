@@ -22,7 +22,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run quality
-      - name: Verify local D1 migrations
-        run: npx wrangler d1 migrations apply sparkcall-db --local
+      - name: Verify isolated local D1 and HTTP integration
+        run: npm run test:integration
         env:
           CI: "1"

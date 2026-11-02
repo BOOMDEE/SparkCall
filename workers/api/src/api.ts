@@ -133,8 +133,9 @@ function recordObject(row: any, includeOwner: boolean) {
 
 async function findRecord(env: Env, key: string) {
   return env.DB.prepare(`
-    SELECT r.*, c.started_at AS call_started_at, c.ended_at AS call_ended_at,
-      c.duration_seconds AS call_duration_seconds
+    SELECT r.*, COALESCE(c.started_at,r.record_started_at) AS call_started_at,
+      COALESCE(c.ended_at,r.record_ended_at) AS call_ended_at,
+      COALESCE(c.duration_seconds,r.record_duration_seconds) AS call_duration_seconds
     FROM records r LEFT JOIN call_history c ON c.id=r.call_id
     WHERE r.id=?1 OR r.slug=?1 COLLATE NOCASE LIMIT 1
   `).bind(key).first<any>();
@@ -392,10 +393,13 @@ async function route(request: Request, env: Env): Promise<Response> {
     const expiration = expiredAt(input.expiresAt);
     if (!slug || !validSlug(slug) || isReserved(slug) || !title || expiration === undefined) return error("A valid title, unique slug, and future expiration are required");
     let callId: string | null = null;
+    let callSnapshot: { started_at: string; ended_at: string | null; duration_seconds: number | null } | null = null;
     if (typeof input.callId === "string" && input.callId) {
-      const call = await env.DB.prepare("SELECT id FROM call_history WHERE id=?1 AND (caller_id=?2 OR recipient_id=?2)").bind(input.callId, user.id).first<{ id: string }>();
+      const call = await env.DB.prepare("SELECT id,started_at,ended_at,duration_seconds FROM call_history WHERE id=?1 AND (caller_id=?2 OR recipient_id=?2)")
+        .bind(input.callId, user.id).first<{ id: string; started_at: string; ended_at: string | null; duration_seconds: number | null }>();
       if (!call) return error("Call not found", 404, "NOT_FOUND");
       callId = call.id;
+      callSnapshot = call;
     }
     const tags = parseArray(input.tags, 30, 64);
     const participants = cleanParticipants(input.participants);
@@ -404,9 +408,9 @@ async function route(request: Request, env: Env): Promise<Response> {
     const manageToken = user.is_temporary ? newToken() : null;
     try {
       await env.DB.prepare(`
-        INSERT INTO records(id,owner_id,call_id,slug,title,description,notes,tags_json,metadata_json,is_public,expires_at,created_at,updated_at,owner_capability_hash,participants_json)
-        VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,0,?10,?11,?11,?12,?13)
-      `).bind(recordId, user.id, callId, slug, title, text(input.description, 5000) || "", text(input.notes, 5000) || "", JSON.stringify(tags), JSON.stringify(metadata), expiration, now(), manageToken ? await hashToken(manageToken) : null, JSON.stringify(participants)).run();
+        INSERT INTO records(id,owner_id,call_id,slug,title,description,notes,tags_json,metadata_json,is_public,expires_at,created_at,updated_at,owner_capability_hash,participants_json,record_started_at,record_ended_at,record_duration_seconds)
+        VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,0,?10,?11,?11,?12,?13,?14,?15,?16)
+      `).bind(recordId, user.id, callId, slug, title, text(input.description, 5000) || "", text(input.notes, 5000) || "", JSON.stringify(tags), JSON.stringify(metadata), expiration, now(), manageToken ? await hashToken(manageToken) : null, JSON.stringify(participants), callSnapshot?.started_at ?? null, callSnapshot?.ended_at ?? null, callSnapshot?.duration_seconds ?? null).run();
     } catch (cause) {
       if (cause instanceof Error && /unique|constraint/i.test(cause.message)) return error("Record slug is already in use", 409, "SLUG_TAKEN");
       throw cause;
@@ -421,9 +425,11 @@ async function route(request: Request, env: Env): Promise<Response> {
   if (recordMatch && method === "GET") {
     const key = decodeURIComponent(recordMatch[1]!);
     const publicRow = await env.DB.prepare(`
-      SELECT r.*,c.started_at AS call_started_at,c.ended_at AS call_ended_at,c.duration_seconds AS call_duration_seconds
+      SELECT r.*,COALESCE(c.started_at,r.record_started_at) AS call_started_at,
+        COALESCE(c.ended_at,r.record_ended_at) AS call_ended_at,
+        COALESCE(c.duration_seconds,r.record_duration_seconds) AS call_duration_seconds
       FROM records r LEFT JOIN call_history c ON c.id=r.call_id
-      WHERE r.slug=?1 COLLATE NOCASE AND r.is_public=1 AND (r.expires_at IS NULL OR r.expires_at>datetime('now'))
+      WHERE r.slug=?1 COLLATE NOCASE AND r.is_public=1 AND (r.expires_at IS NULL OR julianday(r.expires_at)>julianday('now'))
     `).bind(key).first<any>();
     try {
       const { row } = await ownedRecord(request, env, key);

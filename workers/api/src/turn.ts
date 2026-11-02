@@ -132,14 +132,14 @@ export async function snapshotActiveUserUsage(env: Env): Promise<void> {
   const cursor = await env.DB.prepare("SELECT last_user_id FROM turn_snapshot_cursor WHERE id=1").first<{ last_user_id: string | null }>();
   let rows = await env.DB.prepare(`
     SELECT DISTINCT u.id FROM users u JOIN sessions s ON s.user_id=u.id
-    WHERE s.expires_at>datetime('now') AND (u.expires_at IS NULL OR u.expires_at>datetime('now'))
+    WHERE julianday(s.expires_at)>julianday('now') AND (u.expires_at IS NULL OR julianday(u.expires_at)>julianday('now'))
       AND (?1 IS NULL OR u.id>?1) ORDER BY u.id LIMIT 25
   `).bind(cursor?.last_user_id ?? null).all<{ id: string }>();
   if (rows.results.length === 0 && cursor?.last_user_id) {
     await env.DB.prepare("UPDATE turn_snapshot_cursor SET last_user_id=NULL WHERE id=1").run();
     rows = await env.DB.prepare(`
       SELECT DISTINCT u.id FROM users u JOIN sessions s ON s.user_id=u.id
-      WHERE s.expires_at>datetime('now') AND (u.expires_at IS NULL OR u.expires_at>datetime('now'))
+      WHERE julianday(s.expires_at)>julianday('now') AND (u.expires_at IS NULL OR julianday(u.expires_at)>julianday('now'))
       ORDER BY u.id LIMIT 25
     `).all<{ id: string }>();
   }

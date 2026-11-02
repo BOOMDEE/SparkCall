@@ -24,12 +24,12 @@ function secureRealtimeResponse(response: Response, request: Request, env: Env) 
 
 async function scheduledWork(env: Env) {
   await Promise.all([
-    env.DB.prepare("DELETE FROM sessions WHERE expires_at<=datetime('now') OR revoked_at IS NOT NULL").run(),
-    env.DB.prepare("DELETE FROM records WHERE expires_at IS NOT NULL AND expires_at<=datetime('now')").run(),
-    env.DB.prepare("UPDATE call_history SET status='timeout',ended_at=datetime('now'),duration_seconds=0 WHERE status IN ('calling','ringing','connecting') AND started_at<=datetime('now','-2 minutes')").run(),
+    env.DB.prepare("DELETE FROM sessions WHERE julianday(expires_at)<=julianday('now') OR revoked_at IS NOT NULL").run(),
+    env.DB.prepare("DELETE FROM records WHERE expires_at IS NOT NULL AND julianday(expires_at)<=julianday('now')").run(),
+    env.DB.prepare("UPDATE call_history SET status='timeout',ended_at=datetime('now'),duration_seconds=0 WHERE status IN ('calling','ringing','connecting') AND julianday(started_at)<=julianday('now','-2 minutes')").run(),
     env.DB.prepare("DELETE FROM login_attempts WHERE window_started_at<unixepoch()-86400").run(),
     env.DB.prepare("DELETE FROM usage_snapshots WHERE month<strftime('%Y-%m','now','-12 months')").run(),
-    env.DB.prepare("DELETE FROM users WHERE is_temporary=1 AND expires_at IS NOT NULL AND expires_at<=datetime('now')").run(),
+    env.DB.prepare("DELETE FROM users WHERE is_temporary=1 AND expires_at IS NOT NULL AND julianday(expires_at)<=julianday('now')").run(),
   ]);
   await snapshotActiveUserUsage(env);
 }

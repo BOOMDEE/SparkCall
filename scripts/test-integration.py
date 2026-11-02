@@ -1,0 +1,208 @@
+#!/usr/bin/env python3
+"""Run real HTTP integration tests against an isolated local Wrangler + D1.
+
+Requires npm ci and npm run build. Never logs in, deploys, uses production
+credentials, or applies remote migrations. Temporary state is removed on exit.
+"""
+from __future__ import annotations
+
+import http.cookies
+import json
+import os
+from pathlib import Path
+import secrets
+import signal
+import socket
+import subprocess
+import tempfile
+import time
+import urllib.error
+import urllib.request
+
+ROOT = Path(__file__).resolve().parents[1]
+WRANGLER = ROOT / "node_modules/.bin/wrangler"
+PASSWORD = __import__("secrets").token_urlsafe(24)
+CHECKS = 0
+
+
+class Client:
+    def __init__(self, origin: str):
+        self.origin = origin
+        self.cookies: dict[str, str] = {}
+
+    def request(self, method: str, path: str, data=None, status=200, origin=None):
+        global CHECKS
+        headers = {"Origin": origin or self.origin}
+        if self.cookies:
+            headers["Cookie"] = "; ".join(f"{k}={v}" for k, v in self.cookies.items())
+        payload = None if data is None else json.dumps(data).encode()
+        if payload is not None:
+            headers["Content-Type"] = "application/json"
+        request = urllib.request.Request(self.origin + path, payload, headers, method=method)
+        try:
+            response = urllib.request.urlopen(request, timeout=10)
+        except urllib.error.HTTPError as error:
+            response = error
+        content = response.read().decode()
+        assert response.status == status, f"{method} {path}: expected {status}, got {response.status}: {content[:300]}"
+        for line in response.headers.get_all("Set-Cookie", []):
+            parsed = http.cookies.SimpleCookie()
+            parsed.load(line)
+            for name, cookie in parsed.items():
+                if cookie["max-age"] == "0":
+                    self.cookies.pop(name, None)
+                else:
+                    self.cookies[name] = cookie.value
+        CHECKS += 1
+        value = json.loads(content) if "application/json" in response.headers.get("Content-Type", "") else content
+        return value, response.headers
+
+
+def run():
+    assert WRANGLER.exists(), "Run npm ci first"
+    assert (ROOT / "apps/web/dist/index.html").exists(), "Run npm run build first"
+    # Strip all inherited Cloudflare credentials; only --local commands are used.
+    env = {k: v for k, v in os.environ.items() if not k.startswith("CLOUDFLARE_")}
+    env.update(CI="1", WRANGLER_SEND_METRICS="false")
+    state_root = ROOT / ".wrangler"
+    state_root.mkdir(exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="integration-", dir=state_root) as temp:
+        work = Path(temp)
+        config = work / "wrangler.json"
+        config.write_text(json.dumps({
+            "name": "sparkcall-integration",
+            "main": str(ROOT / "workers/api/src/index.ts"),
+            "compatibility_date": "2026-11-02",
+            "assets": {"directory": str(ROOT / "apps/web/dist"), "binding": "ASSETS", "not_found_handling": "single-page-application", "run_worker_first": ["/api/*"]},
+            "d1_databases": [{"binding": "DB", "database_name": "sparkcall-integration", "database_id": "00000000-0000-0000-0000-000000000000", "migrations_dir": str(ROOT / "migrations")}],
+            "durable_objects": {"bindings": [{"name": "SIGNALING", "class_name": "SparkCallDurableObject"}, {"name": "PRESENCE", "class_name": "SparkCallPresenceObject"}]},
+            "exports": {"SparkCallDurableObject": {"type": "durable-object", "storage": "sqlite"}, "SparkCallPresenceObject": {"type": "durable-object", "storage": "sqlite"}},
+            "vars": {"SPARKCALL_INTERNAL_TOKEN": secrets.token_hex(32)},
+        }) + "\n")
+        base = [str(WRANGLER)]
+        common = ["--local", "--config", str(config), "--persist-to", str(work / "state")]
+
+        def local_sql(sql: str):
+            subprocess.run(base + ["d1", "execute", "sparkcall-integration"] + common + ["--command", sql], cwd=work, env=env, check=True, stdout=subprocess.DEVNULL)
+
+        print("Applying migrations to isolated local D1...", flush=True)
+        subprocess.run(base + ["d1", "migrations", "apply", "sparkcall-integration"] + common, cwd=work, env=env, check=True, stdout=subprocess.DEVNULL)
+        with socket.socket() as port_socket:
+            port_socket.bind(("127.0.0.1", 0))
+            port = port_socket.getsockname()[1]
+        origin = f"http://127.0.0.1:{port}"
+        log = (work / "worker.log").open("w+")
+        process = subprocess.Popen(base + ["dev"] + common + ["--ip", "127.0.0.1", "--port", str(port)], cwd=work, env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+        try:
+            deadline = time.monotonic() + 60
+            while True:
+                try:
+                    urllib.request.urlopen(origin + "/api/session", timeout=1).close()
+                    break
+                except (OSError, urllib.error.URLError):
+                    if process.poll() is not None or time.monotonic() >= deadline:
+                        log.seek(0)
+                        raise RuntimeError("Local Worker failed to start:\n" + log.read()[-5000:])
+                    time.sleep(0.25)
+            print("Testing real local HTTP routes...", flush=True)
+            anonymous, alice, bob, guest = [Client(origin) for _ in range(4)]
+            anonymous.request("GET", "/")
+            data, _ = anonymous.request("GET", "/api/session")
+            assert data["authenticated"] is False
+            anonymous.request("GET", "/api/me", status=401)
+            anonymous.request("POST", "/api/auth/guest", {}, status=403, origin="https://attacker.invalid")
+            anonymous.request("POST", "/api/calls", {"number": "Nobody"}, status=403, origin="https://attacker.invalid")
+            ids = []
+            for client in (alice, bob, guest):
+                data, headers = client.request("POST", "/api/auth/guest", {}, status=201)
+                ids.append(data["user"]["id"])
+                assert data["user"]["temporary"] is True
+                assert "HttpOnly" in headers.get("Set-Cookie", "")
+                assert "SameSite=" in headers.get("Set-Cookie", "")
+            guest.request("POST", "/api/numbers", {"number": "GuestCustom"}, status=403)
+            for client, username, number, user_id in ((alice, "alice", "CaseNumber", ids[0]), (bob, "bob", "casenumber", ids[1])):
+                data, _ = client.request("POST", "/api/auth/upgrade", {"username": username, "password": PASSWORD})
+                assert data["user"]["id"] == user_id and data["user"]["temporary"] is False
+                client.request("POST", "/api/numbers", {"number": number})
+            data, _ = anonymous.request("GET", "/api/numbers/availability?number=CaseNumber")
+            assert data["available"] is False
+            data, _ = anonymous.request("GET", "/api/numbers/availability?number=CASENUMBER")
+            assert data["available"] is True
+            alice.request("POST", "/api/numbers", {"number": "OtherNumber"}, status=429)
+            alice.request("POST", "/api/contacts", {"number": "casenumber", "name": "Bob", "favorite": True}, status=201)
+            data, _ = alice.request("GET", "/api/contacts?q=Bob")
+            contact = data["contacts"][0]
+            bob.request("GET", f"/api/contacts/{contact['id']}", status=404)
+            bob.request("PATCH", f"/api/contacts/{contact['id']}", {"name": "Tampered"})
+            data, _ = alice.request("GET", f"/api/contacts/{contact['id']}")
+            assert data["contact"]["name"] == "Bob"
+            bob.request("POST", "/api/blocked", {"number": "CaseNumber"})
+            alice.request("POST", "/api/calls", {"number": "casenumber"}, status=403)
+            bob.request("DELETE", "/api/blocked", {"number": "CaseNumber"})
+            bob.request("PATCH", "/api/settings/preferences", {"allowIncoming": False, "bitrateMode": "high", "bitrateKbps": 64})
+            alice.request("POST", "/api/calls", {"number": "casenumber"}, status=403)
+            data, _ = bob.request("GET", "/api/settings/preferences")
+            assert data["preferences"]["bitrateKbps"] == 64
+            payload = {"slug": "private-meeting", "title": "Private meeting", "expiresAt": None,
+                       "participants": [{"displayName": "Consenting", "consent": True}, {"displayName": "Private", "consent": False}],
+                       "metadata": {"topic": "Testing", "email": "do-not-publish", "sessionToken": "do-not-publish"}}
+            data, _ = alice.request("POST", "/api/records", payload, status=201)
+            record_id = data["id"]
+            anonymous.request("GET", "/api/records/private-meeting", status=404)
+            bob.request("PATCH", f"/api/records/{record_id}", {"isPublic": True}, status=404)
+            alice.request("PATCH", f"/api/records/{record_id}", {"isPublic": True})
+            data, headers = anonymous.request("GET", "/api/records/PRIVATE-MEETING")
+            record = data["record"]
+            assert headers.get("X-Robots-Tag") == "noindex, nofollow"
+            assert "id" not in record and "owner_id" not in record
+            assert record["participants"] == [{"displayName": "Consenting"}]
+            assert record["metadata"] == {"topic": "Testing"}
+            bob.request("POST", "/api/records", {**payload, "slug": "PRIVATE-MEETING"}, status=409)
+            alice.request("PATCH", f"/api/records/{record_id}", {"isPublic": False})
+            anonymous.request("GET", "/api/records/private-meeting", status=404)
+            alice.request("PATCH", f"/api/records/{record_id}", {"isPublic": True})
+            # An ISO timestamp earlier today must expire immediately, not tomorrow.
+            local_sql(f"UPDATE records SET expires_at=strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 minute') WHERE id='{record_id}'")
+            anonymous.request("GET", "/api/records/private-meeting", status=404)
+            alice.request("GET", f"/api/records/{record_id}")
+            call_id = secrets.token_hex(16)
+            local_sql(f"INSERT INTO call_history(id,caller_id,recipient_id,caller_number,recipient_number,started_at,ended_at,duration_seconds,status,created_at) VALUES('{call_id}','{ids[0]}','{ids[2]}','CaseNumber','Guest',datetime('now','-1 minute'),datetime('now'),42,'ended',datetime('now'))")
+            data, headers = guest.request("POST", "/api/records", {"slug": "guest-owned", "title": "Guest owned", "expiresAt": None, "callId": call_id}, status=201)
+            guest_record = data["id"]
+            assert data["recoveryCapability"] is True and "HttpOnly" in headers.get("Set-Cookie", "")
+            guest.request("POST", "/api/auth/logout", {})
+            guest.request("GET", "/api/me", status=401)
+            guest.request("PATCH", f"/api/records/{guest_record}", {"title": "After logout"})
+            # Exercise the same foreign-key action as expired temporary-user cleanup.
+            local_sql(f"DELETE FROM users WHERE id='{ids[2]}'")
+            data, _ = guest.request("GET", f"/api/records/{guest_record}")
+            assert data["record"]["title"] == "After logout"
+            assert data["record"]["durationSeconds"] == 42
+            assert data["record"]["startedAt"] and data["record"]["endedAt"]
+            guest.request("PATCH", f"/api/records/{guest_record}", {"isPublic": True})
+            data, _ = anonymous.request("GET", "/api/records/guest-owned")
+            assert data["record"]["durationSeconds"] == 42
+            guest.request("DELETE", f"/api/records/{guest_record}")
+            anonymous.request("GET", "/api/records/guest-owned", status=404)
+            alice.request("GET", "/api/turn/credentials", status=503)
+            alice.request("POST", "/api/auth/logout", {})
+            alice.request("GET", "/api/me", status=401)
+            alice.request("POST", "/api/auth/login", {"username": "alice", "password": "incorrect"}, status=401)
+            data, _ = alice.request("POST", "/api/auth/login", {"username": "ALICE", "password": PASSWORD})
+            assert data["user"]["id"] == ids[0]
+            print(f"PASS: {CHECKS} HTTP assertions, isolated migrations, ownership and expiry regressions.", flush=True)
+        finally:
+            try:
+                os.killpg(process.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+            try:
+                process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                os.killpg(process.pid, signal.SIGKILL)
+                process.wait(timeout=5)
+            log.close()
+
+
+if __name__ == "__main__":
+    run()

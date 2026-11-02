@@ -17,6 +17,7 @@
     "check": "npm run check --workspace @sparkcall/web && npm run check --workspace @sparkcall/worker",
     "lint": "eslint apps/web/src workers/api/src",
     "test": "vitest run",
+    "test:integration": "python3 scripts/test-integration.py",
     "quality": "npm run check && npm run lint && npm test && npm run build",
     "deploy": "wrangler deploy",
     "db:migrate:local": "wrangler d1 migrations apply sparkcall-db --local",
