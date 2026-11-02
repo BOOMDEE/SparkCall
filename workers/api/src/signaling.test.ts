@@ -45,7 +45,7 @@ describe("Durable Object terminal call cleanup", () => {
     const ctx = { storage, getWebSockets: () => [socket] };
     const instance = Object.assign(Object.create(SparkCallDurableObject.prototype), {
       ctx,
-      env: { DB: db, PRESENCE: presence, SPARKCALL_INTERNAL_TOKEN: "test-internal" },
+      env: { DB: db, PRESENCE: presence, INTERNAL_SIGNALING_TOKEN: "test-internal" },
       authorizeSocket: vi.fn(async () => true),
     }) as unknown as { finish(record: { id: string; callerId: string; calleeId: string; status: string; createdAt: number }, status: "ENDED"): Promise<void> };
 

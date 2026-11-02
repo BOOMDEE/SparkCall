@@ -9,6 +9,7 @@ from __future__ import annotations
 import http.cookies
 import json
 import os
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import secrets
 import signal
@@ -23,7 +24,7 @@ from websocket_client import LocalWebSocket
 
 ROOT = Path(__file__).resolve().parents[1]
 WRANGLER = ROOT / "node_modules/.bin/wrangler"
-PASSWORD = __import__("secrets").token_urlsafe(24)
+PASSWORD = f"Integration-{secrets.token_urlsafe(24)}"
 CHECKS = 0
 
 
@@ -136,7 +137,7 @@ def run():
             "d1_databases": [{"binding": "DB", "database_name": "sparkcall-integration", "database_id": "00000000-0000-0000-0000-000000000000", "migrations_dir": str(ROOT / "migrations")}],
             "durable_objects": {"bindings": [{"name": "SIGNALING", "class_name": "SparkCallDurableObject"}, {"name": "PRESENCE", "class_name": "SparkCallPresenceObject"}]},
             "exports": {"SparkCallDurableObject": {"type": "durable-object", "storage": "sqlite"}, "SparkCallPresenceObject": {"type": "durable-object", "storage": "sqlite"}},
-            "vars": {"SPARKCALL_INTERNAL_TOKEN": secrets.token_hex(32)},
+            "vars": {"INTERNAL_SIGNALING_TOKEN": secrets.token_hex(32)},
         }) + "\n")
         base = [str(WRANGLER)]
         common = ["--local", "--config", str(config), "--persist-to", str(work / "state")]
@@ -207,6 +208,17 @@ def run():
             bob.request("POST", "/api/blocked", {"number": "CaseNumber"})
             alice.request("POST", "/api/calls", {"number": "casenumber"}, status=403)
             bob.request("DELETE", "/api/blocked", {"number": "CaseNumber"})
+            alice_secondary = Client(origin)
+            alice_secondary.request("POST", "/api/auth/login", {"username": "alice", "password": PASSWORD})
+            baseline, _ = alice.request("GET", "/api/settings/preferences")
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                first = pool.submit(alice.request, "PATCH", "/api/settings/preferences", {"theme": "dark"})
+                second = pool.submit(alice_secondary.request, "PATCH", "/api/settings/preferences", {"bitrateKbps": 64})
+                first_result, second_result = first.result()[0], second.result()[0]
+            assert {first_result["version"], second_result["version"]} == {baseline["version"] + 1, baseline["version"] + 2}
+            latest, _ = alice.request("GET", "/api/settings/preferences")
+            assert latest["version"] == baseline["version"] + 2
+            assert latest["preferences"]["theme"] == "dark" and latest["preferences"]["bitrateKbps"] == 64
             bob.request("PATCH", "/api/settings/preferences", {"allowIncoming": False, "bitrateMode": "high", "bitrateKbps": 64})
             alice.request("POST", "/api/calls", {"number": "casenumber"}, status=403)
             data, _ = bob.request("GET", "/api/settings/preferences")

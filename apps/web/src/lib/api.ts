@@ -13,7 +13,10 @@ export async function api<T = unknown>(path: string, init: RequestInit = {}): Pr
   if (payload && typeof payload === "object" && !Array.isArray(payload)) {
     const envelope = payload as Record<string, unknown>;
     for (const key of ["user", "contacts", "history", "blocked", "record", "records", "preferences"]) {
-      if (Object.hasOwn(envelope, key)) return envelope[key] as T;
+      if (Object.hasOwn(envelope, key)) {
+        if (key === "preferences" && Object.hasOwn(envelope, "version")) return payload as T;
+        return envelope[key] as T;
+      }
     }
   }
   return payload as T;
@@ -59,6 +62,7 @@ export type Usage = {
   note: string;
 };
 export type UserPreferences = {
+  forceTurn: boolean;
   echoCancellation: boolean;
   noiseSuppression: boolean;
   autoGainControl: boolean;
@@ -70,6 +74,7 @@ export type UserPreferences = {
   showOnlineStatus: boolean;
   theme: "light" | "dark" | "system";
 };
+export type PreferenceSnapshot = { preferences: UserPreferences; version: number };
 export type PublicRecord = {
   publicIdentifier: string;
   id?: string;

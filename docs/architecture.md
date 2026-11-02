@@ -37,13 +37,15 @@ sequenceDiagram
 | Web 静态资源 | Cloudflare Worker Assets | 公开网页；不含任何 server secret |
 | WebRTC 中继媒体 | Cloudflare Realtime TURN | 浏览器只拿到绑定用户 ID 的短期 ICE credentials |
 
+用户偏好 PATCH 在单个浏览器会话内通过队列串行发送；D1 使用原子 JSON 合并并递增 `version`，每次写入返回该次提交后的偏好快照和版本。这样可以避免同一会话的响应乱序覆盖，并减少多个会话并发更新不同字段时的丢失更新。
+
 公共通话记录默认私有。公开由所有者显式开启，可撤销、设定过期时间并更改 slug。公开内容不包含邮箱、内部 ID、会话或凭据；参与者姓名仅在参与者明确授权后展示。公开记录页面设置 `noindex, nofollow`。临时用户通过记录专用的 HttpOnly capability cookie 保留后续管理/撤销能力；该能力不使用可预测记录 ID。
 
 第三份迁移将记录所有者外键改为 `ON DELETE SET NULL`，并保留通话元数据快照，因此临时身份被清理后，独立 capability 仍可管理相应记录。此 Cookie 并不是跨设备恢复账号：丢失后可能无法恢复管理。自由备注与元数据值不具备自动个人信息脱敏能力，公开前必须审阅自行填写的内容。
 
 ## TURN 用量
 
-Worker 使用 Cloudflare Realtime 官方 GraphQL Analytics 查询 `egressBytes`，并以 `customIdentifier` 区分用户。定时任务每小时轮转最多 25 个活动用户并将估算快照写入 D1。采样数据可能延迟或不完整，因此接口标记 `authoritative: false`。`TURN_MONTHLY_QUOTA_BYTES` 是展示配额，不是实时的流量闸门。分析 API token 仅存在于 Worker secret，不会返回浏览器。
+Worker 使用 Cloudflare Realtime 官方 GraphQL Analytics 查询 `egressBytes`，并以 `customIdentifier` 区分用户。定时任务每小时轮转最多 25 个活动用户并将估算快照写入 D1。采样数据可能延迟或不完整，因此接口标记 `authoritative: false`。TURN 费用按 Cloudflare Realtime 的适用计费规则（包括适用的中继 egress）产生；`TURN_MONTHLY_QUOTA_BYTES` 只是展示配额，不是实时流量闸门或硬性消费上限。分析 API token 仅存在于 Worker secret，不会返回浏览器。
 
 ## 计划取舍与限制
 

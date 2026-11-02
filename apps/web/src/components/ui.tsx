@@ -34,9 +34,11 @@ export function AccessibleDialog({ open, onClose, titleId, children, className =
   useFocusTrap(open, dialogRef)
   useEffect(() => {
     if (!open) return undefined
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
     const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.preventDefault(); onClose() } }
     document.addEventListener('keydown', onKeyDown)
-    return () => document.removeEventListener('keydown', onKeyDown)
+    return () => { document.removeEventListener('keydown', onKeyDown); document.body.style.overflow = previousOverflow }
   }, [open, onClose])
   if (!open) return null
   return <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" role="presentation">

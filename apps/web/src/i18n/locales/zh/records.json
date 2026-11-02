@@ -2,7 +2,7 @@
   "eyebrow": "私密工作区",
   "title": "通话记录",
   "detail": "创建通话的私密摘要。记录不会包含音频，公开分享也会保持关闭，直到你明确启用。",
-  "actions": { "closeForm": "关闭表单", "newRecord": "新建记录", "creating": "创建中…", "createPrivate": "创建私密记录", "close": "关闭", "edit": "编辑", "copied": "已复制", "copyLink": "复制链接", "deleteAria": "删除记录", "save": "保存更改", "saving": "保存中…", "viewPublic": "查看公开页面" },
+  "actions": { "retry": "重试", "closeForm": "关闭表单", "newRecord": "新建记录", "creating": "创建中…", "createPrivate": "创建私密记录", "close": "关闭", "edit": "编辑", "copied": "已复制", "copyLink": "复制链接", "deleteAria": "删除记录", "save": "保存更改", "saving": "保存中…", "viewPublic": "查看公开页面" },
   "security": { "ownerNote": "只有已登录的所有者可以管理这些记录。临时账户可能还会获得安全且绑定当前浏览器的恢复能力；它不会显示在页面上，也不会包含在记录 URL 中。" },
   "create": { "title": "创建私密通话记录", "detail": "记录会以私密状态开始。是否以及何时公开，由你决定。", "privacyNote": "不要填写账户邮箱、凭据或私密会话数据。记录永远不会存储通话音频。", "capabilityNote": "如果此临时会话符合条件，管理恢复能力会保存在安全的 HttpOnly 浏览器 Cookie 中，不会出现在页面或公开链接里。" },
   "fields": { "slug": "公开 URL slug", "title": "标题", "associatedCall": "关联通话（可选）", "description": "描述", "notes": "备注", "tags": "标签（用逗号分隔）", "expiration": "过期时间（可选）", "participants": "参与者显示名称（每行一个）", "metadata": "自定义元数据（JSON 对象）" },

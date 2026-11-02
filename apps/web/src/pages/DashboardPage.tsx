@@ -10,6 +10,11 @@ import { Button, Card, Notice } from "../components/ui";
 import { useCallSession } from "../contexts/CallSession";
 
 const inputClass = "focus-ring w-full rounded-md border border-neutral-200 bg-white py-3 pl-10 pr-3 text-sm outline-none transition placeholder:text-neutral-400 dark:border-neutral-800 dark:bg-neutral-950 dark:text-white";
+const callStatuses = new Set(["calling", "ringing", "connecting", "connected", "ended", "rejected", "busy", "timeout", "failed", "cancelled"]);
+
+export function translateCallStatus(t: (key: string, options?: Record<string, unknown>) => string, status: string) {
+  return t(`recent.status.${callStatuses.has(status) ? status : "unknown"}`);
+}
 
 export default function DashboardPage() {
   const { t, i18n } = useTranslation("dashboard");
@@ -139,7 +144,7 @@ export default function DashboardPage() {
           {history.loading ? <p className="py-3 text-sm text-neutral-500" role="status">{t("states.loading")}</p> : history.error ? <Notice>{t("errors.loadHistory", { detail: history.error })}</Notice> : !history.data?.length ? <div className="py-3"><p className="text-sm font-medium">{t("recent.emptyTitle")}</p><p className="mt-1 text-sm text-neutral-500">{t("recent.emptyDetail")}</p></div> : <div className="divide-y divide-neutral-100 dark:divide-neutral-900">{history.data.map((item) => {
             const participant = item.direction === "outgoing" ? item.recipient : item.caller;
             const direction = item.direction === "incoming" ? t("recent.incoming") : t("recent.outgoing");
-            return <div key={item.id} className="flex flex-col justify-between gap-1 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-center"><div><p className="text-sm font-medium">{participant || t("recent.unknownParticipant")}</p><p className="mt-1 text-xs text-neutral-500">{t("recent.meta", { direction, status: item.status, duration: item.durationSeconds ? formatDuration(item.durationSeconds) : "—" })}</p></div><p className="text-xs text-neutral-500">{formatDate(item.startedAt, i18n.language)}</p></div>;
+            return <div key={item.id} className="flex flex-col justify-between gap-1 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-center"><div><p className="text-sm font-medium">{participant || t("recent.unknownParticipant")}</p><p className="mt-1 text-xs text-neutral-500">{t("recent.meta", { direction, status: translateCallStatus(t, item.status), duration: item.durationSeconds ? formatDuration(item.durationSeconds) : "—" })}</p></div><p className="text-xs text-neutral-500">{formatDate(item.startedAt, i18n.language)}</p></div>;
           })}</div>}
         </div>
       </Card>

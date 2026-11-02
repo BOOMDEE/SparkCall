@@ -2,9 +2,27 @@
   "title": "设置",
   "description": "管理你的身份、通话偏好、隐私、通知和显示设置。",
   "navigationLabel": "设置分区",
-  "sections": { "account": "账号", "audio": "音频", "privacy": "隐私", "notifications": "通知", "appearance": "外观", "usage": "用量" },
-  "actions": { "saveDisplayName": "保存显示名称", "checkAvailability": "检查可用性", "saving": "保存中…", "claimNumber": "申请号码", "upgrade": "升级账号", "refreshDevices": "刷新设备" },
-  "states": { "loading": "正在加载用量…" },
+  "sections": {
+    "account": "账号",
+    "audio": "音频",
+    "privacy": "隐私",
+    "notifications": "通知",
+    "appearance": "外观",
+    "usage": "用量",
+    "webhook": "Webhook"
+  },
+  "actions": {
+    "saveDisplayName": "保存显示名称",
+    "checkAvailability": "检查可用性",
+    "saving": "保存中…",
+    "claimNumber": "申请号码",
+    "upgrade": "升级账号",
+    "refreshDevices": "刷新设备",
+    "retry": "重试"
+  },
+  "states": {
+    "loading": "正在加载用量…"
+  },
   "errors": {
     "profile": "无法保存个人资料。{{code}}",
     "availability": "无法检查号码可用性。{{code}}",
@@ -14,18 +32,111 @@
     "audioSave": "无法保存音频偏好。{{code}}",
     "privacySave": "无法保存隐私偏好。{{code}}",
     "usage": "无法加载用量数据。{{code}}",
-    "appearanceSave": "无法保存外观偏好。{{code}}"
+    "appearanceSave": "无法保存外观偏好。{{code}}",
+    "webhook": "无法加载或保存 Webhook。{{code}}"
   },
   "account": {
-    "title": "账号与身份", "detail": "你的 SparkCall 身份独立于登录会话。", "displayName": "显示名称", "username": "用户名", "temporary": "临时账号", "displayNameSaved": "显示名称已保存。",
-    "numberTitle": "SparkCall 号码", "currentNumber": "当前号码：", "notClaimed": "尚未申请", "temporaryNumber": "临时账号使用自动生成的号码，不能申请自定义号码。", "chooseNumber": "选择号码", "numberPlaceholder": "仅限字母和数字；区分大小写", "available": "可用", "unavailable": "不可用", "numberSaved": "SparkCall 号码已保存。", "numberCooldown": "号码区分大小写。每 30 天可更换一次号码。",
-    "upgradeTitle": "升级临时账号", "upgradeDetail": "创建永久用户名和密码，同时保留此身份及其符合条件的数据。", "password": "密码", "upgradeSaved": "你的临时身份现已成为永久账号。现有联系人和通话记录仍保留在此身份下。", "expires": "此临时账号将于 {{date}} 过期。"
+    "title": "账号与身份",
+    "detail": "你的 SparkCall 身份独立于登录会话。",
+    "displayName": "显示名称",
+    "username": "用户名",
+    "temporary": "临时账号",
+    "displayNameSaved": "显示名称已保存。",
+    "numberTitle": "SparkCall 号码",
+    "currentNumber": "当前号码：",
+    "notClaimed": "尚未申请",
+    "temporaryNumber": "临时账号使用自动生成的号码，不能申请自定义号码。",
+    "chooseNumber": "选择号码",
+    "numberPlaceholder": "仅限字母和数字；区分大小写",
+    "available": "可用",
+    "unavailable": "不可用",
+    "numberSaved": "SparkCall 号码已保存。",
+    "numberCooldown": "号码区分大小写。每 30 天可更换一次号码。",
+    "upgradeTitle": "升级临时账号",
+    "upgradeDetail": "创建永久用户名和密码，同时保留此身份及其符合条件的数据。",
+    "password": "密码",
+    "upgradeSaved": "你的临时身份现已成为永久账号。现有联系人和通话记录仍保留在此身份下。",
+    "expires": "此临时账号将于 {{date}} 过期。"
   },
   "audio": {
-    "title": "音频", "detail": "设置会保存并用于后续通话。实际音频码率可能受网络状况和编解码器行为影响。", "saved": "音频偏好已保存。", "echoCancellation": "回声消除", "noiseSuppression": "降噪", "autoGainControl": "自动增益控制", "devicesTitle": "音频设备", "microphone": "麦克风", "speaker": "扬声器", "systemDefault": "系统默认", "devicesDetail": "授予麦克风权限后会显示设备名称。扬声器切换取决于浏览器支持。", "bitrate": "外发码率目标", "low": "低 · 16 kbps", "standard": "标准 · 32 kbps", "high": "高 · 64 kbps", "custom": "自定义", "customTarget": "自定义目标（6–128 kbps）"
+    "title": "音频",
+    "detail": "设置会保存并用于后续通话。实际音频码率可能受网络状况和编解码器行为影响。",
+    "saved": "音频偏好已保存。",
+    "echoCancellation": "回声消除",
+    "noiseSuppression": "降噪",
+    "autoGainControl": "自动增益控制",
+    "devicesTitle": "音频设备",
+    "microphone": "麦克风",
+    "speaker": "扬声器",
+    "systemDefault": "系统默认",
+    "devicesDetail": "授予麦克风权限后会显示设备名称。扬声器切换取决于浏览器支持。",
+    "bitrate": "外发码率目标",
+    "low": "低 · 16 kbps",
+    "standard": "标准 · 32 kbps",
+    "high": "高 · 64 kbps",
+    "custom": "自定义",
+    "customTarget": "自定义目标（6–128 kbps）",
+    "forceTurn": "强制中继（Force TURN）",
+    "forceTurnDetail": "仅使用中继候选；新通话不会尝试直连/P2P。此功能消耗共享 Cloudflare Realtime TURN 配额；超出免费额度后按 $0.05/GB 计费。"
   },
-  "privacy": { "title": "隐私", "detail": "通话音频不会被录制。屏蔽和来电设置由服务器执行。", "allowIncoming": "允许来电", "allowIncomingDetail": "被拒绝的通话会在建立 WebRTC 之前被拒绝。", "showOnlineStatus": "显示在线状态", "showOnlineStatusDetail": "控制未来面向公众的功能是否可以共享在线状态。" },
-  "notifications": { "title": "通知", "detail": "查看 SparkCall 工作区的通知偏好。", "emptyTitle": "暂无可用的通知偏好", "emptyDetail": "SparkCall 当前没有为此账号提供通知控制项。" },
-  "appearance": { "title": "外观", "detail": "选择浅色、深色，或跟随系统偏好。", "theme": "主题", "system": "系统", "light": "浅色", "dark": "深色" },
-  "usage": { "title": "TURN 用量", "detail": "来自 Cloudflare Realtime 分析的月度中继用量。采样分析可能不等于最终计费数据。", "unavailable": "用量报告尚未配置，或分析服务没有返回数据。配置 TURN 凭据后，通话仍可正常工作。", "unavailableValue": "不可用", "monthly": "月度用量", "quota": "配额", "remaining": "剩余", "quotaUsed": "配额使用率", "month": "月份", "lastUpdated": "最后更新", "source": "数据来源", "accounting": "计费口径", "authoritative": "权威数据", "estimated": "估算 / 采样", "platformTitle": "平台总量 · 已授权管理员", "egress": "TURN 外发流量", "platformDetail": "汇总值为采样估算，并非权威计费总额。" }
+  "privacy": {
+    "title": "隐私",
+    "detail": "通话音频不会被录制。屏蔽和来电设置由服务器执行。",
+    "allowIncoming": "允许来电",
+    "allowIncomingDetail": "被拒绝的通话会在建立 WebRTC 之前被拒绝。",
+    "showOnlineStatus": "显示在线状态",
+    "showOnlineStatusDetail": "控制未来面向公众的功能是否可以共享在线状态。"
+  },
+  "notifications": {
+    "title": "通知",
+    "detail": "查看 SparkCall 工作区的通知偏好。",
+    "emptyTitle": "暂无可用的通知偏好",
+    "emptyDetail": "SparkCall 当前没有为此账号提供通知控制项。"
+  },
+  "appearance": {
+    "title": "外观",
+    "detail": "选择浅色、深色，或跟随系统偏好。",
+    "theme": "主题",
+    "system": "系统",
+    "light": "浅色",
+    "dark": "深色"
+  },
+  "usage": {
+    "title": "TURN 用量",
+    "detail": "来自 Cloudflare Realtime 分析的月度中继用量。采样分析可能不等于最终计费数据。",
+    "unavailable": "用量报告尚未配置，或分析服务没有返回数据。配置 TURN 凭据后，通话仍可正常工作。",
+    "unavailableValue": "不可用",
+    "monthly": "月度用量",
+    "quota": "配额",
+    "remaining": "剩余",
+    "quotaUsed": "配额使用率",
+    "month": "月份",
+    "lastUpdated": "最后更新",
+    "source": "数据来源",
+    "accounting": "计费口径",
+    "authoritative": "权威数据",
+    "estimated": "估算 / 采样",
+    "platformTitle": "平台总量 · 已授权管理员",
+    "egress": "TURN 外发流量",
+    "platformDetail": "汇总值为采样估算，并非权威计费总额。",
+    "sources": { "cloudflare-realtime-analytics": "Cloudflare Realtime Analytics", "cached-snapshot": "缓存快照", "unavailable": "不可用", "unknown": "未知" },
+    "notes": { "Cloudflare Realtime Analytics is sampled and time-windowed; this dashboard is an estimate, not exact real-time billing data. TURN billing measures egress bytes.": "Cloudflare Realtime Analytics 使用采样并按时间窗口统计；此面板是估算值，不是精确的实时计费数据。TURN 计费按外发字节计算。" }
+  },
+  "webhook": {
+    "title": "来电 Webhook",
+    "detail": "可选：来电时通知你的 HTTPS 端点。",
+    "privacy": "只发送来电通知所需的最小事件数据。保存的 URL 不会在此显示。",
+    "events": "HTTPS GET 只包含事件类型、通话引用和时间戳，不包含来电号码、音频或凭据。接收方或中间代理可能记录查询参数。",
+    "cost": "保存和投递时都会检查 DNS，但 Workers 无法将任意外部 DNS 固定到连接。请只配置受信任的公开 HTTPS 端点；投递可能产生服务商或网络费用。",
+    "configured": "Webhook 已配置（URL 已隐藏）",
+    "url": "HTTPS 端点 URL",
+    "replaceDetail": "输入新 URL 会替换当前端点；此输入框始终为空。",
+    "save": "保存 Webhook",
+    "replace": "替换 Webhook",
+    "remove": "移除",
+    "saved": "Webhook 已保存。",
+    "removed": "Webhook 已移除。",
+    "httpsRequired": "Webhook URL 必须使用 HTTPS。",
+    "confirmRemove": "确定移除此 Webhook 吗？之后将停止来电通知。"
+  }
 }

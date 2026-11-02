@@ -29,13 +29,13 @@ function namespace(fetchResponse = new Response(JSON.stringify({ ok: true }))) {
   };
 }
 
-function env(db: { prepare: ReturnType<typeof vi.fn> }, presence = namespace()) {
+function env(db: { prepare: ReturnType<typeof vi.fn> }, presence = namespace(), signaling = namespace()) {
   return {
     DB: db,
-    SIGNALING: namespace(),
+    SIGNALING: signaling,
     PRESENCE: presence,
     ASSETS: { fetch: vi.fn() },
-    SPARKCALL_INTERNAL_TOKEN: "internal-token",
+    INTERNAL_SIGNALING_TOKEN: "internal-token",
     ALLOWED_ORIGIN: "https://app.example",
   } as never;
 }
@@ -112,5 +112,34 @@ describe("realtime call authorization and activity checks", () => {
     const activityQuery = statements.find((query) => query.includes("FROM call_history") && query.includes("LIMIT 1"));
     expect(activityQuery).toContain("julianday(started_at)>julianday('now','-2 minutes')");
     expect(activityQuery).not.toContain("started_at>datetime('now','-2 minutes')");
+  });
+
+  it("cancels a call through signaling and removes its pending presence invitation", async () => {
+    const statements: string[] = [];
+    const call = { id: "call-12345678", caller_id: "caller", recipient_id: "callee", status: "calling" };
+    const db = {
+      prepare: vi.fn((query: string) => {
+        statements.push(query);
+        return { bind: vi.fn(() => ({
+          first: vi.fn().mockResolvedValue(call),
+          run: vi.fn().mockResolvedValue({ success: true, meta: { changes: 1 } }),
+        })) };
+      }),
+    };
+    const signaling = namespace();
+    const presence = namespace();
+    const request = new Request("https://app.example/api/calls/call-12345678/cancel", {
+      method: "POST",
+      headers: { Origin: "https://app.example", "Content-Type": "application/json" },
+      body: "{}",
+    });
+    const response = await handleRealtimeApi(request, env(db, presence, signaling));
+
+    expect(response?.status).toBe(200);
+    expect(signaling.stub.fetch).toHaveBeenCalledWith("https://signaling.internal/cancel", expect.objectContaining({ method: "POST" }));
+    expect(statements.some((query) => query.includes("UPDATE call_history SET status='cancelled'"))).toBe(true);
+    expect(presence.stub.fetch).toHaveBeenCalledWith("https://presence.internal/invite-ended", expect.objectContaining({ method: "POST" }));
+    const endedRequest = presence.stub.fetch.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(JSON.parse(String(endedRequest?.body))).toEqual({ callId: "call-12345678" });
   });
 });

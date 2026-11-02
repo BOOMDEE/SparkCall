@@ -34,6 +34,7 @@ describe("AccessibleDialog", () => {
     const onClose = vi.fn(() => { open = false; });
     const view = render(<AccessibleDialog open={open} onClose={onClose} titleId="dialog-title"><h2 id="dialog-title">Dialog</h2><button>First</button><button>Last</button></AccessibleDialog>);
     await settle();
+    expect(document.body.style.overflow).toBe("hidden");
     const buttons = Array.from(view.host.querySelectorAll("button"));
     expect(document.activeElement).toBe(buttons[0]);
     buttons[1].focus();
@@ -48,6 +49,7 @@ describe("AccessibleDialog", () => {
     act(() => view.root.render(<AccessibleDialog open={false} onClose={onClose} titleId="dialog-title">Dialog</AccessibleDialog>));
     await settle();
     expect(document.activeElement).toBe(trigger);
+    expect(document.body.style.overflow).toBe("");
   });
 });
 

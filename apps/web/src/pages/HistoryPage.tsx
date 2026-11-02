@@ -21,16 +21,18 @@ function translatedValue(t: (key: string, options?: Record<string, unknown>) => 
   return t(`${group}.${value}`, { defaultValue: value });
 }
 
-function ResourceMessage({ loading, error, empty, emptyTitle, emptyDetail, children }: {
+function ResourceMessage({ loading, error, empty, emptyTitle, emptyDetail, children, retry, retryLabel }: {
   loading: boolean;
   error: string | null;
   empty?: boolean;
   emptyTitle: string;
   emptyDetail: string;
   children: React.ReactNode;
+  retry?: () => void;
+  retryLabel?: string;
 }) {
   if (loading) return <p className="py-10 text-center text-sm text-neutral-500" role="status">{emptyTitle}</p>;
-  if (error) return <Notice>{error}</Notice>;
+  if (error) return <div className="space-y-3"><Notice>{error}</Notice>{retry && <Button variant="secondary" onClick={retry}>{retryLabel}</Button>}</div>;
   if (empty) return <Empty title={emptyTitle} detail={emptyDetail} />;
   return <>{children}</>;
 }
@@ -61,7 +63,7 @@ export default function HistoryPage() {
         </select>
       </label>
     </div>
-    <ResourceMessage loading={resource.loading} error={resource.error ? t("errors.load", { detail: resource.error }) : null} empty={!resource.data?.length} emptyTitle={resource.loading ? t("states.loading") : t("empty.title")} emptyDetail={t("empty.detail")}>
+    <ResourceMessage loading={resource.loading} error={resource.error ? t("errors.load", { detail: resource.error }) : null} empty={!resource.data?.length} emptyTitle={resource.loading ? t("states.loading") : t("empty.title")} emptyDetail={t("empty.detail")} retry={resource.refresh} retryLabel={t("actions.retry")}>
       <Card className="overflow-hidden">
         <div className="grid grid-cols-[minmax(0,1fr)_auto] border-b border-neutral-200 px-4 py-2.5 text-xs font-medium uppercase tracking-wide text-neutral-500 dark:border-neutral-800 sm:grid-cols-[minmax(0,1fr)_10rem_9rem_8rem]">
           <span>{t("table.participant")}</span><span className="hidden sm:block">{t("table.direction")}</span><span className="hidden sm:block">{t("table.status")}</span><span className="text-right">{t("table.started")}</span>
@@ -93,7 +95,7 @@ export function HistoryDetailPage() {
 
   return <>
     <PageHeader eyebrow={t("eyebrow")} title={t("detailTitle")} detail={call ? `${translatedValue(t, "direction", call.direction)} · ${translatedValue(t, "status", call.status)}` : t("detailDescription")} action={<Link to="/history"><Button variant="secondary"><ArrowLeft size={15} aria-hidden="true" />{t("actions.back")}</Button></Link>} />
-    <ResourceMessage loading={resource.loading} error={resource.error ? t("errors.loadDetail", { detail: resource.error }) : null} empty={!resource.loading && !resource.error && !call} emptyTitle={t("empty.detailTitle")} emptyDetail={t("empty.detailDescription")}>
+    <ResourceMessage loading={resource.loading} error={resource.error ? t("errors.loadDetail", { detail: resource.error }) : null} empty={!resource.loading && !resource.error && !call} emptyTitle={t("empty.detailTitle")} emptyDetail={t("empty.detailDescription")} retry={resource.refresh} retryLabel={t("actions.retry")}>
       {call && <Card className="max-w-2xl p-5 sm:p-7"><dl className="grid gap-5 sm:grid-cols-2">
         <div><dt className="text-xs text-neutral-500">{t("fields.participant")}</dt><dd className="mt-1 text-sm">{participant || t("unknownParticipant")}</dd></div>
         <div><dt className="text-xs text-neutral-500">{t("fields.direction")}</dt><dd className="mt-1 text-sm">{translatedValue(t, "direction", call.direction)}</dd></div>

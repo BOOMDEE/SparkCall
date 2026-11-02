@@ -42,7 +42,7 @@ export function ActiveCallControls({ onOpenDialer }: { onOpenDialer: () => void 
   const ending = call.role === "caller" && call.state !== "CONNECTED";
   return <div className="border-b border-neutral-200 bg-neutral-50 px-4 py-2 dark:border-neutral-800 dark:bg-neutral-950" role="region" aria-label={t("call.controls") }>
     <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-3">
-      <button className="min-w-0 text-left" onClick={onOpenDialer}><span className="block truncate text-sm font-medium">{label}</span><span className="block text-xs text-neutral-500">{t(`call.states.${call.state}`, { defaultValue: call.state.toLowerCase() })}</span></button>
+      <button className="min-w-0 text-left" onClick={onOpenDialer}><span className="block truncate text-sm font-medium">{label}</span><span className="block text-xs text-neutral-500" aria-live="polite" aria-atomic="true">{t(`call.states.${call.state}`, { defaultValue: call.state.toLowerCase() })}</span></button>
       <div className="flex shrink-0 gap-1.5">
         <Button variant="secondary" className="px-2" aria-label={call.muted ? t("call.unmute") : t("call.mute")} onClick={() => session.controller?.toggleMute()}>{call.muted ? <MicOff size={15} aria-hidden="true" /> : <Mic size={15} aria-hidden="true" />}</Button>
         <Button variant="danger" className="px-2" aria-label={ending ? t("call.cancel") : t("call.hangUp")} onClick={() => ending ? session.controller?.cancel() : session.controller?.hangup()}><PhoneOff size={15} aria-hidden="true" /></Button>

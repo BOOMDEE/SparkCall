@@ -39,7 +39,17 @@
     "unmute": "Unmute",
     "cancel": "Cancel",
     "hangUp": "Hang up",
-    "refreshDevices": "Refresh devices"
+    "refreshDevices": "Refresh devices",
+    "retry": "Retry"
+  },
+  "incomingDialog": {
+    "title": "Incoming call",
+    "answer": "Answer",
+    "decline": "Decline",
+    "audioLabel": "Call audio",
+    "preferencesLoading": "Loading call preferences. Answering is temporarily unavailable.",
+    "preferencesFailed": "Call preferences could not be loaded. Calls are blocked until they are loaded successfully.",
+    "retry": "Retry"
   },
   "audio": {
     "title": "Audio devices",
@@ -49,7 +59,9 @@
     "systemDefault": "System default",
     "microphoneOption": "Microphone",
     "speakerOption": "Speaker",
-    "supportNote": "Speaker selection depends on browser support. Bitrate is a target; network and codec behavior can change the actual rate."
+    "supportNote": "Speaker selection depends on browser support. Bitrate is a target; network and codec behavior can change the actual rate.",
+    "playbackBlocked": "Remote audio is blocked by your browser. Enable playback to hear the call.",
+    "enablePlayback": "Enable audio playback"
   },
   "status": {
     "eyebrow": "Live details",
@@ -73,6 +85,8 @@
   "errors": {
     "missingNumber": "Enter a SparkCall number before calling.",
     "callFailed": "Could not start the call. {{detail}}",
+    "preferencesLoading": "Loading call preferences. Calling is temporarily unavailable.",
+    "preferencesFailed": "Call preferences could not be loaded. Calling is blocked until they are loaded successfully.",
     "audioDevicesFailed": "Could not access audio devices. {{detail}}",
     "microphoneFailed": "Could not change microphone. {{detail}}",
     "speakerFailed": "Speaker selection is not available in this browser. {{detail}}",

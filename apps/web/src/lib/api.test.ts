@@ -18,4 +18,10 @@ describe("api client", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: { message: "number is taken" } }), { status: 409 })));
     await expect(api("/api/numbers", { method: "POST" })).rejects.toThrow("number is taken");
   });
+
+  it("preserves the preference snapshot envelope when a monotonic version is present", async () => {
+    const snapshot = { preferences: { theme: "dark" }, version: 7 };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(snapshot), { status: 200 })));
+    await expect(api("/api/settings/preferences")).resolves.toEqual(snapshot);
+  });
 });

@@ -34,6 +34,8 @@ class FakeSender {
 }
 
 class FakePeer {
+  static configs: RTCConfiguration[] = [];
+  constructor(config: RTCConfiguration) { FakePeer.configs.push(config); }
   connectionState: RTCPeerConnectionState = "new";
   iceConnectionState: RTCIceConnectionState = "new";
   localDescription: RTCSessionDescriptionInit | null = null;
@@ -66,6 +68,7 @@ class FakeWebSocket {
 
 function installWebRtcMocks(getUserMedia: typeof navigator.mediaDevices.getUserMedia) {
   FakeWebSocket.instances = [];
+  FakePeer.configs = [];
   vi.stubGlobal("MediaStream", class { getTracks(): FakeTrack[] { return []; } });
   vi.stubGlobal("WebSocket", FakeWebSocket);
   vi.stubGlobal("RTCPeerConnection", FakePeer);
@@ -79,6 +82,106 @@ function installWebRtcMocks(getUserMedia: typeof navigator.mediaDevices.getUserM
     clearInterval,
   });
 }
+
+describe("CallController ICE transport policy", () => {
+  afterEach(() => {
+    for (const controller of controllers.splice(0)) controller.destroy();
+    vi.unstubAllGlobals();
+  });
+  it("uses standard ICE with all candidates by default", async () => {
+    installWebRtcMocks(vi.fn().mockResolvedValue(new FakeStream(new FakeTrack("default"))));
+    const controller = createController({ iceServers: [] });
+    await controller.startOutgoing("call-default", "callee");
+    expect(FakePeer.configs[0]?.iceTransportPolicy).toBe("all");
+  });
+  it("uses relay-only ICE when Force TURN is enabled", async () => {
+    installWebRtcMocks(vi.fn().mockResolvedValue(new FakeStream(new FakeTrack("relay"))));
+    const controller = createController({ iceServers: [], audio: { forceTurn: true } });
+    await controller.startOutgoing("call-relay", "callee");
+    expect(FakePeer.configs[0]?.iceTransportPolicy).toBe("relay");
+  });
+});
+describe("CallController TURN credential failures", () => {
+  afterEach(() => {
+    for (const controller of controllers.splice(0)) controller.destroy();
+    vi.unstubAllGlobals();
+  });
+
+  it("falls back to direct ICE when TURN credentials fail for a normal call", async () => {
+    installWebRtcMocks(vi.fn().mockResolvedValue(new FakeStream(new FakeTrack("direct"))));
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("TURN unavailable")));
+    const controller = createController();
+
+    await controller.startOutgoing("call-direct-fallback", "callee");
+
+    expect(FakePeer.configs[0]).toMatchObject({ iceServers: [], iceTransportPolicy: "all" });
+  });
+
+  it("fails clearly instead of falling back when Force TURN credentials fail", async () => {
+    installWebRtcMocks(vi.fn().mockResolvedValue(new FakeStream(new FakeTrack("relay"))));
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("TURN unavailable")));
+    const controller = createController({ audio: { forceTurn: true } });
+
+    await expect(controller.startOutgoing("call-relay-failure", "callee")).rejects.toThrow(/Relay-only calling is unavailable.*TURN unavailable/);
+    expect(FakePeer.configs).toHaveLength(0);
+  });
+});
+
+describe("CallController server-side cancellation", () => {
+  afterEach(() => {
+    for (const controller of controllers.splice(0)) controller.destroy();
+    vi.unstubAllGlobals();
+  });
+
+  it("POSTs cancellation and stops a microphone stream that resolves after the user cancels", async () => {
+    let resolveMedia!: (stream: FakeStream) => void;
+    const getUserMedia = vi.fn(() => new Promise<FakeStream>((resolve) => { resolveMedia = resolve; }));
+    installWebRtcMocks(getUserMedia as unknown as typeof navigator.mediaDevices.getUserMedia);
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const controller = createController({ iceServers: [] });
+    const starting = controller.startOutgoing("call-early-cancel", "callee");
+
+    controller.cancel();
+    controller.cancel();
+    expect(controller.snapshot.state).toBe("CANCELLED");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith("/api/calls/call-early-cancel/cancel", expect.objectContaining({
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    }));
+
+    const lateStream = new FakeStream(new FakeTrack("late-media"));
+    resolveMedia(lateStream);
+    await starting;
+    expect(lateStream.getTracks()[0]?.stopped).toBe(true);
+  });
+});
+
+describe("CallController remote audio playback", () => {
+  afterEach(() => {
+    for (const controller of controllers.splice(0)) controller.destroy();
+    vi.unstubAllGlobals();
+  });
+
+  it("reports autoplay rejection and clears it after a user-gesture retry", async () => {
+    installWebRtcMocks(vi.fn().mockResolvedValue(new FakeStream(new FakeTrack("audio"))));
+    const blocked = vi.fn();
+    const recovered = vi.fn();
+    const play = vi.fn().mockRejectedValueOnce(new Error("autoplay blocked")).mockResolvedValue(undefined);
+    const controller = createController({ onAudioPlaybackBlocked: blocked, onAudioPlaybackRecovered: recovered });
+    const audio = { play } as unknown as HTMLAudioElement;
+
+    controller.attachRemoteAudio(audio);
+    await vi.waitFor(() => expect(blocked).toHaveBeenCalledTimes(1));
+    await controller.resumeRemoteAudio();
+
+    expect(play).toHaveBeenCalledTimes(2);
+    expect(recovered).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe("CallController microphone mute intent", () => {
   afterEach(() => {

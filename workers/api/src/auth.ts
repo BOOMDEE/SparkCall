@@ -119,13 +119,13 @@ export async function revokeSession(request: Request, env: Env) {
   const session = await env.DB.prepare("SELECT id, user_id FROM sessions WHERE token_hash=?1").bind(tokenHash).first<{ id: string; user_id: string }>();
   await env.DB.prepare("DELETE FROM sessions WHERE token_hash=?1").bind(tokenHash).run();
   // Presence notification is only an optimization; the signaling path revalidates from D1.
-  if (session?.id && session.user_id && env.SPARKCALL_INTERNAL_TOKEN !== undefined && env.PRESENCE) {
+  if (session?.id && session.user_id && env.INTERNAL_SIGNALING_TOKEN !== undefined && env.PRESENCE) {
     try {
       const stub = env.PRESENCE.get(env.PRESENCE.idFromName(session.user_id));
       await stub.fetch("https://presence/session-revoked", {
         method: "POST",
         headers: {
-          "X-SparkCall-Internal-Token": env.SPARKCALL_INTERNAL_TOKEN,
+          "X-SparkCall-Internal-Token": env.INTERNAL_SIGNALING_TOKEN,
           "X-SparkCall-User-ID": session.user_id,
           "X-SparkCall-Session-ID": session.id,
         },

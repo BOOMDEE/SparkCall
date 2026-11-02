@@ -1,6 +1,7 @@
 import type { Env } from "./env";
 import { rateLimit, requireAuth } from "./auth";
 import { body, error, findByNumber, id, isBlocked, json, now, validDialNumber } from "./database";
+import { triggerIncomingCallWebhook } from "./webhook";
 
 const ACTIVE = "'calling','ringing','connecting','connected'";
 
@@ -18,12 +19,12 @@ function internalHeaders(request: Request, env: Env, extra: Record<string, strin
   headers.delete("X-SparkCall-User-ID");
   headers.delete("X-SparkCall-Session-ID");
   headers.delete("X-SparkCall-Role");
-  headers.set("X-SparkCall-Internal-Token", env.SPARKCALL_INTERNAL_TOKEN || "");
+  headers.set("X-SparkCall-Internal-Token", env.INTERNAL_SIGNALING_TOKEN || "");
   for (const [key, value] of Object.entries(extra)) headers.set(key, value);
   return headers;
 }
 
-async function createCall(request: Request, env: Env): Promise<Response> {
+async function createCall(request: Request, env: Env, ctx?: ExecutionContext): Promise<Response> {
   const caller = await requireAuth(request, env);
   const ip = request.headers.get("CF-Connecting-IP") || "unknown";
   if (!await rateLimit(env, `calls:user:${caller.id}`, 10, 60)
@@ -47,7 +48,7 @@ async function createCall(request: Request, env: Env): Promise<Response> {
     LIMIT 1
   `).bind(caller.id, callee.id).first();
   if (active) return error("One of the users is already on a call", 409, "USER_BUSY");
-  if (!env.SPARKCALL_INTERNAL_TOKEN) return error("Calling service is not configured", 503, "SIGNALING_UNAVAILABLE");
+  if (!env.INTERNAL_SIGNALING_TOKEN) return error("Calling service is not configured", 503, "SIGNALING_UNAVAILABLE");
 
   const callId = id();
   const createdAt = now();
@@ -62,7 +63,7 @@ async function createCall(request: Request, env: Env): Promise<Response> {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "X-SparkCall-Internal-Token": env.SPARKCALL_INTERNAL_TOKEN,
+        "X-SparkCall-Internal-Token": env.INTERNAL_SIGNALING_TOKEN,
         "X-SparkCall-User-ID": callee.id,
       },
       body: JSON.stringify({
@@ -79,6 +80,8 @@ async function createCall(request: Request, env: Env): Promise<Response> {
     await env.DB.prepare("UPDATE call_history SET status='failed',ended_at=datetime('now') WHERE id=?1").bind(callId).run();
     return error("Could not notify the recipient", 503, "PRESENCE_UNAVAILABLE");
   }
+  const notify = triggerIncomingCallWebhook(env, callee.id, callId, createdAt).catch(() => undefined);
+  if (ctx) ctx.waitUntil(notify); else void notify;
   return json({ callId, userId: callee.id, targetNumber: callee.number, status: "CALLING" }, 201);
 }
 
@@ -90,11 +93,11 @@ async function cancelCall(request: Request, env: Env, callId: string): Promise<R
   if (call.caller_id !== caller.id) return error("Only the caller can cancel this request", 403, "FORBIDDEN");
   if (call.status === "connected") return error("Use hang up after the call connects", 409, "CALL_CONNECTED");
   if (["ended", "rejected", "busy", "timeout", "failed", "cancelled"].includes(call.status)) return json({ ok: true });
-  if (!env.SPARKCALL_INTERNAL_TOKEN) return error("Calling service is not configured", 503, "SIGNALING_UNAVAILABLE");
+  if (!env.INTERNAL_SIGNALING_TOKEN) return error("Calling service is not configured", 503, "SIGNALING_UNAVAILABLE");
   const signaling = env.SIGNALING.get(env.SIGNALING.idFromName(callId));
   const signalResponse = await signaling.fetch("https://signaling.internal/cancel", {
     method: "POST",
-    headers: { "X-SparkCall-Internal-Token": env.SPARKCALL_INTERNAL_TOKEN, "X-SparkCall-Call-ID": callId, "X-SparkCall-Caller-ID": caller.id },
+    headers: { "X-SparkCall-Internal-Token": env.INTERNAL_SIGNALING_TOKEN, "X-SparkCall-Call-ID": callId, "X-SparkCall-Caller-ID": caller.id },
   });
   if (signalResponse.status === 409) return error("The call connected; use hang up instead", 409, "CALL_CONNECTED");
   await env.DB.prepare("UPDATE call_history SET status='cancelled',ended_at=datetime('now'),duration_seconds=0 WHERE id=?1 AND caller_id=?2 AND status IN ('calling','ringing','connecting')")
@@ -103,20 +106,20 @@ async function cancelCall(request: Request, env: Env, callId: string): Promise<R
     const presence = env.PRESENCE.get(env.PRESENCE.idFromName(call.recipient_id));
     await presence.fetch("https://presence.internal/invite-ended", {
       method: "POST",
-      headers: { "content-type": "application/json", "X-SparkCall-Internal-Token": env.SPARKCALL_INTERNAL_TOKEN || "", "X-SparkCall-User-ID": call.recipient_id },
+      headers: { "content-type": "application/json", "X-SparkCall-Internal-Token": env.INTERNAL_SIGNALING_TOKEN || "", "X-SparkCall-User-ID": call.recipient_id },
       body: JSON.stringify({ callId }),
     });
   } catch { /* The invitation will also expire automatically. */ }
   return json({ ok: true });
 }
 
-export async function handleRealtimeApi(request: Request, env: Env): Promise<Response | null> {
+export async function handleRealtimeApi(request: Request, env: Env, ctx?: ExecutionContext): Promise<Response | null> {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, "") || "/";
   try {
     if (path === "/api/calls" && request.method === "POST") {
       if (!isSameOrigin(request, env)) return error("Cross-site request rejected", 403, "CSRF");
-      return await createCall(request, env);
+      return await createCall(request, env, ctx);
     }
     const cancelMatch = path.match(/^\/api\/calls\/([^/]+)\/cancel$/);
     if (cancelMatch && request.method === "POST") {
@@ -126,7 +129,7 @@ export async function handleRealtimeApi(request: Request, env: Env): Promise<Res
     if (path === "/api/presence") {
       if (request.method !== "GET") return error("Method not allowed", 405, "METHOD_NOT_ALLOWED");
       if (!isSameOrigin(request, env)) return error("Cross-site request rejected", 403, "CSRF");
-      if (!env.SPARKCALL_INTERNAL_TOKEN) return error("Presence service is not configured", 503, "SIGNALING_UNAVAILABLE");
+      if (!env.INTERNAL_SIGNALING_TOKEN) return error("Presence service is not configured", 503, "SIGNALING_UNAVAILABLE");
       const user = await requireAuth(request, env);
       const headers = internalHeaders(request, env, {
         "X-SparkCall-User-ID": user.id,
@@ -139,7 +142,7 @@ export async function handleRealtimeApi(request: Request, env: Env): Promise<Res
     if (signalMatch) {
       if (request.method !== "GET") return error("Method not allowed", 405, "METHOD_NOT_ALLOWED");
       if (!isSameOrigin(request, env)) return error("Cross-site request rejected", 403, "CSRF");
-      if (!env.SPARKCALL_INTERNAL_TOKEN) return error("Signaling service is not configured", 503, "SIGNALING_UNAVAILABLE");
+      if (!env.INTERNAL_SIGNALING_TOKEN) return error("Signaling service is not configured", 503, "SIGNALING_UNAVAILABLE");
       const user = await requireAuth(request, env);
       const callId = decodeURIComponent(signalMatch[1]!);
       const call = await env.DB.prepare(`

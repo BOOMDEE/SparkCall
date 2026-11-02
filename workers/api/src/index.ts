@@ -39,7 +39,7 @@ export default {
   async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
     const path = new URL(request.url).pathname;
     if (path.startsWith("/api/")) {
-      const realtime = await handleRealtimeApi(request, env);
+      const realtime = await handleRealtimeApi(request, env, _ctx);
       if (realtime) return secureRealtimeResponse(realtime, request, env);
       return handleApi(request, env);
     }

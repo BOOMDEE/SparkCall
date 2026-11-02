@@ -39,7 +39,17 @@
     "unmute": "取消静音",
     "cancel": "取消",
     "hangUp": "挂断",
-    "refreshDevices": "刷新设备"
+    "refreshDevices": "刷新设备",
+    "retry": "重试"
+  },
+  "incomingDialog": {
+    "title": "来电",
+    "answer": "接听",
+    "decline": "拒绝",
+    "audioLabel": "通话音频",
+    "preferencesLoading": "正在加载通话偏好设置，暂时无法接听。",
+    "preferencesFailed": "无法加载通话偏好设置。在成功加载前，通话已被阻止。",
+    "retry": "重试"
   },
   "audio": {
     "title": "音频设备",
@@ -49,7 +59,9 @@
     "systemDefault": "系统默认",
     "microphoneOption": "麦克风",
     "speakerOption": "扬声器",
-    "supportNote": "扬声器选择取决于浏览器支持。码率是目标值，网络和编解码器行为可能导致实际码率变化。"
+    "supportNote": "扬声器选择取决于浏览器支持。码率是目标值，网络和编解码器行为可能导致实际码率变化。",
+    "playbackBlocked": "浏览器阻止了远程音频。请启用播放以听到通话。",
+    "enablePlayback": "启用音频播放"
   },
   "status": {
     "eyebrow": "实时详情",
@@ -73,6 +85,8 @@
   "errors": {
     "missingNumber": "请输入 SparkCall 号码后再呼叫。",
     "callFailed": "无法发起通话。{{detail}}",
+    "preferencesLoading": "正在加载通话偏好设置，暂时无法呼叫。",
+    "preferencesFailed": "无法加载通话偏好设置。在成功加载前，呼叫已被阻止。",
     "audioDevicesFailed": "无法访问音频设备。{{detail}}",
     "microphoneFailed": "无法切换麦克风。{{detail}}",
     "speakerFailed": "此浏览器不支持选择扬声器。{{detail}}",

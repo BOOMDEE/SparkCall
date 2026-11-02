@@ -58,7 +58,20 @@
     "unknownParticipant": "Unknown participant",
     "meta": "{{direction}} · {{status}} · {{duration}}",
     "incoming": "Incoming",
-    "outgoing": "Outgoing"
+    "outgoing": "Outgoing",
+    "status": {
+      "calling": "Calling",
+      "ringing": "Ringing",
+      "connecting": "Connecting",
+      "connected": "Connected",
+      "ended": "Ended",
+      "rejected": "Rejected",
+      "busy": "Busy",
+      "timeout": "Timed out",
+      "failed": "Failed",
+      "cancelled": "Cancelled",
+      "unknown": "Unknown"
+    }
   },
   "usage": {
     "label": "TURN usage · {{month}}",

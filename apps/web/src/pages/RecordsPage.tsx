@@ -111,7 +111,7 @@ export default function RecordsPage() {
       </form>
     </Card>}
     {records.loading && <div className="py-8 text-sm text-neutral-500" role="status" aria-live="polite">{t("states.loading")}</div>}
-    {!records.loading && records.error && <Notice>{`${t("errors.loadFailed")}: ${records.error}`}</Notice>}
+    {!records.loading && records.error && <div className="space-y-3"><Notice>{`${t("errors.loadFailed")}: ${records.error}`}</Notice><Button variant="secondary" onClick={() => records.refresh()}>{t("actions.retry")}</Button></div>}
     {!records.loading && !records.error && !records.data?.length && <Empty title={t("empty.title")} detail={t("empty.detail")} />}
     {!records.loading && !records.error && Boolean(records.data?.length) && <div className="space-y-3">{records.data?.map((record) => <RecordCard key={record.id} record={record} onUpdated={records.refresh} locale={i18n.language} />)}</div>}
   </div>;

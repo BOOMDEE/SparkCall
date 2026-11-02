@@ -10,7 +10,7 @@ interface SocketAttachment { userId: string; sessionId: string; role: Role; mess
 interface CallRecord { id: string; callerId: string; calleeId: string; status: CallStatus; createdAt: number; connectedAt?: number; disconnectedAt?: Partial<Record<Role, number>>; }
 interface QueuedSignal { target: Role; payload: string; createdAt: number; }
 interface Invite { callId: string; callerNumber: string; callerName: string; createdAt: number; expiresAt: number; }
-interface SignalingEnv extends Env { SPARKCALL_INTERNAL_TOKEN?: string; }
+interface SignalingEnv extends Env { INTERNAL_SIGNALING_TOKEN?: string; }
 interface SessionRow { user_id: string; session_expires_at: string | null; user_expires_at: string | null; revoked_at: string | null; }
 
 const TERMINAL = new Set<CallStatus>(["ENDED", "REJECTED", "BUSY", "TIMEOUT", "FAILED", "CANCELLED"]);
@@ -31,7 +31,7 @@ function sessionInvalidReason(row: SessionRow | null, atMs: number) {
 
 function upgraded(request: Request) { return request.headers.get("Upgrade")?.toLowerCase() === "websocket"; }
 function internal(request: Request, env: SignalingEnv) {
-  return !!env.SPARKCALL_INTERNAL_TOKEN && request.headers.get("X-SparkCall-Internal-Token") === env.SPARKCALL_INTERNAL_TOKEN;
+  return !!env.INTERNAL_SIGNALING_TOKEN && request.headers.get("X-SparkCall-Internal-Token") === env.INTERNAL_SIGNALING_TOKEN;
 }
 function attachment(socket: WebSocket): SocketAttachment | null {
   try { return socket.deserializeAttachment() as SocketAttachment; } catch { return null; }
@@ -272,7 +272,7 @@ export class SparkCallDurableObject extends DurableObject<SignalingEnv> {
   private async registerCall(userId: string, sessionId: string, callId: string) {
     try {
       const stub = this.env.PRESENCE.get(this.env.PRESENCE.idFromName(userId));
-      const response = await stub.fetch("https://presence/register-call", { method: "POST", headers: { "X-SparkCall-Internal-Token": this.env.SPARKCALL_INTERNAL_TOKEN || "", "X-SparkCall-User-ID": userId, "X-SparkCall-Session-ID": sessionId, "X-SparkCall-Call-ID": callId } });
+      const response = await stub.fetch("https://presence/register-call", { method: "POST", headers: { "X-SparkCall-Internal-Token": this.env.INTERNAL_SIGNALING_TOKEN || "", "X-SparkCall-User-ID": userId, "X-SparkCall-Session-ID": sessionId, "X-SparkCall-Call-ID": callId } });
       return response.ok;
     } catch { return false; }
   }
@@ -281,7 +281,7 @@ export class SparkCallDurableObject extends DurableObject<SignalingEnv> {
     try {
       const resolvedCallId = callId ?? (await this.ctx.storage.get<CallRecord>("call"))?.id ?? "";
       const stub = this.env.PRESENCE.get(this.env.PRESENCE.idFromName(userId));
-      await stub.fetch("https://presence/unregister-call", { method: "POST", headers: { "X-SparkCall-Internal-Token": this.env.SPARKCALL_INTERNAL_TOKEN || "", "X-SparkCall-User-ID": userId, "X-SparkCall-Session-ID": sessionId, "X-SparkCall-Call-ID": resolvedCallId } });
+      await stub.fetch("https://presence/unregister-call", { method: "POST", headers: { "X-SparkCall-Internal-Token": this.env.INTERNAL_SIGNALING_TOKEN || "", "X-SparkCall-User-ID": userId, "X-SparkCall-Session-ID": sessionId, "X-SparkCall-Call-ID": resolvedCallId } });
     } catch { /* cleanup is best effort */ }
   }
 
@@ -440,7 +440,7 @@ export class SparkCallPresenceObject extends DurableObject<SignalingEnv> {
     const entries = await this.ctx.storage.list<{ callId: string; sessionId: string }>({ prefix: "call:" });
     for (const [key, item] of entries) if (item.sessionId === sessionId) {
       const stub = this.env.SIGNALING.get(this.env.SIGNALING.idFromName(item.callId));
-      try { await stub.fetch("https://signaling/session-revoked", { method: "POST", headers: { "X-SparkCall-Internal-Token": this.env.SPARKCALL_INTERNAL_TOKEN || "", "X-SparkCall-Session-ID": sessionId } }); } catch { /* signaling will fail closed on next alarm/message */ }
+      try { await stub.fetch("https://signaling/session-revoked", { method: "POST", headers: { "X-SparkCall-Internal-Token": this.env.INTERNAL_SIGNALING_TOKEN || "", "X-SparkCall-Session-ID": sessionId } }); } catch { /* signaling will fail closed on next alarm/message */ }
       await this.ctx.storage.delete(key);
     }
     for (const socket of this.ctx.getWebSockets()) if (attachment(socket)?.sessionId === sessionId) { reply(socket, { type: "session-invalid", reason: "SESSION_REVOKED" }); try { socket.close(INVALID_SESSION_CODE, "SESSION_REVOKED"); } catch { /* closed */ } }

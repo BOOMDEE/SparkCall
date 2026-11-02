@@ -9,7 +9,7 @@
   "fields": { "participant": "参与者", "direction": "方向", "status": "状态", "duration": "时长", "started": "开始时间", "ended": "结束时间" },
   "direction": { "incoming": "呼入", "outgoing": "呼出" },
   "status": { "connected": "已接通", "ended": "已结束", "timeout": "已超时", "rejected": "已拒绝", "failed": "失败", "busy": "忙线" },
-  "actions": { "back": "通话历史", "callAgain": "再次呼叫", "createRecord": "创建通话记录" },
+  "actions": { "retry": "重试", "back": "通话历史", "callAgain": "再次呼叫", "createRecord": "创建通话记录" },
   "states": { "loading": "正在加载通话历史…" },
   "empty": { "title": "未找到通话", "detail": "请尝试其他筛选条件，或先发起一次通话。", "detailTitle": "未找到通话", "detailDescription": "此通话已不可用。" },
   "errors": { "load": "无法加载通话历史。{{detail}}", "loadDetail": "无法加载通话详情。{{detail}}" },

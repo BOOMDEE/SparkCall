@@ -2,8 +2,9 @@ import type { Env } from "./env";
 import { authenticate, clearSessionCookie, createSession, hashPassword, hashToken, newToken, requireAuth, revokeSession, sessionCookie, verifyPassword, rateLimit } from "./auth";
 import { body, error, findByNumber, findUser, id, json, now, publicUser, text, validDialNumber, validNumber, validSlug, validUsername } from "./database";
 import { getPlatformTurnUsage, getUserTurnUsage } from "./turn";
+import { saveWebhook, validateResolvedHost, validateWebhookUrl, webhookConfigured } from "./webhook";
 
-const METHODS = new Set(["GET", "POST", "PATCH", "DELETE", "OPTIONS"]);
+const METHODS = new Set(["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]);
 const RESERVED = new Set(["admin", "api", "call", "callrecords", "contact", "help", "root", "sparkcall", "support", "system"]);
 const DEFAULT_PREFERENCES = {
   echoCancellation: true,
@@ -14,9 +15,12 @@ const DEFAULT_PREFERENCES = {
   bitrateMode: "standard",
   bitrateKbps: 32,
   allowIncoming: true,
+  forceTurn: false,
   showOnlineStatus: true,
   theme: "system",
 };
+const TURN_PROVIDER_TIMEOUT_MS = 5_000;
+const TURN_PROVIDER_MAX_RESPONSE_BYTES = 64 * 1024;
 
 function withSecurity(response: Response, request: Request, env: Env) {
   const headers = new Headers(response.headers);
@@ -162,7 +166,7 @@ async function route(request: Request, env: Env): Promise<Response> {
   const method = request.method;
   if (!METHODS.has(method)) return error("Method not allowed", 405, "METHOD_NOT_ALLOWED");
   if (method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: { "access-control-allow-methods": "GET,POST,PATCH,DELETE,OPTIONS", "access-control-allow-headers": "content-type,authorization", "access-control-max-age": "86400" } });
+    return new Response(null, { status: 204, headers: { "access-control-allow-methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS", "access-control-allow-headers": "content-type,authorization", "access-control-max-age": "86400" } });
   }
   if (!path.startsWith("/api/")) return error("Not found", 404, "NOT_FOUND");
   if (method !== "GET" && !csrf(request, env)) return error("Cross-site request rejected", 403, "CSRF");
@@ -239,28 +243,52 @@ async function route(request: Request, env: Env): Promise<Response> {
 
   if (path === "/api/settings/preferences" && method === "GET") {
     const user = await requireAuth(request, env);
-    const row = await env.DB.prepare("SELECT settings_json FROM user_preferences WHERE user_id=?1").bind(user.id).first<{ settings_json: string }>();
-    return json({ preferences: { ...DEFAULT_PREFERENCES, ...(row ? JSON.parse(row.settings_json) : {}) } });
+    const row = await env.DB.prepare("SELECT settings_json, version FROM user_preferences WHERE user_id=?1").bind(user.id).first<{ settings_json: string; version: number }>();
+    return json({ preferences: { ...DEFAULT_PREFERENCES, ...(row ? JSON.parse(row.settings_json) : {}) }, version: row?.version ?? 0 });
   }
   if (path === "/api/settings/preferences" && method === "PATCH") {
     const user = await requireAuth(request, env);
     const input = await body(request);
-    const current = await env.DB.prepare("SELECT settings_json FROM user_preferences WHERE user_id=?1").bind(user.id).first<{ settings_json: string }>();
-    const preferences: Record<string, unknown> = { ...DEFAULT_PREFERENCES, ...(current ? JSON.parse(current.settings_json) : {}) };
-    for (const key of ["echoCancellation", "noiseSuppression", "autoGainControl", "allowIncoming", "showOnlineStatus"] as const) {
-      if (typeof input[key] === "boolean") preferences[key] = input[key];
+    const patch: Record<string, unknown> = {};
+    for (const key of ["echoCancellation", "noiseSuppression", "autoGainControl", "allowIncoming", "showOnlineStatus", "forceTurn"] as const) {
+      if (typeof input[key] === "boolean") patch[key] = input[key];
     }
     for (const key of ["audioInputDeviceId", "audioOutputDeviceId"] as const) {
-      if (typeof input[key] === "string" && input[key].length <= 256) preferences[key] = input[key];
+      if (typeof input[key] === "string" && input[key].length <= 256) patch[key] = input[key];
     }
-    if (input.bitrateMode === "low" || input.bitrateMode === "standard" || input.bitrateMode === "high" || input.bitrateMode === "custom") preferences.bitrateMode = input.bitrateMode;
-    if (Number.isInteger(input.bitrateKbps) && Number(input.bitrateKbps) >= 6 && Number(input.bitrateKbps) <= 128) preferences.bitrateKbps = Number(input.bitrateKbps);
-    if (input.theme === "light" || input.theme === "dark" || input.theme === "system") preferences.theme = input.theme;
-    await env.DB.prepare(`
-      INSERT INTO user_preferences(user_id,settings_json,updated_at) VALUES(?1,?2,?3)
-      ON CONFLICT(user_id) DO UPDATE SET settings_json=excluded.settings_json,updated_at=excluded.updated_at
-    `).bind(user.id, JSON.stringify(preferences), now()).run();
-    return json({ preferences });
+    if (input.bitrateMode === "low" || input.bitrateMode === "standard" || input.bitrateMode === "high" || input.bitrateMode === "custom") patch.bitrateMode = input.bitrateMode;
+    if (Number.isInteger(input.bitrateKbps) && Number(input.bitrateKbps) >= 6 && Number(input.bitrateKbps) <= 128) patch.bitrateKbps = Number(input.bitrateKbps);
+    if (input.theme === "light" || input.theme === "dark" || input.theme === "system") patch.theme = input.theme;
+    const timestamp = now();
+    const row = await env.DB.prepare(`
+      INSERT INTO user_preferences(user_id,settings_json,updated_at,version) VALUES(?1,?2,?3,1)
+      ON CONFLICT(user_id) DO UPDATE SET
+        settings_json=json_patch(COALESCE(user_preferences.settings_json,'{}'), excluded.settings_json),
+        updated_at=excluded.updated_at,
+        version=user_preferences.version + 1
+      RETURNING settings_json, version
+    `).bind(user.id, JSON.stringify(patch), timestamp).first<{ settings_json: string; version: number }>();
+    const preferences: Record<string, unknown> = { ...DEFAULT_PREFERENCES, ...(row ? JSON.parse(row.settings_json) : {}) };
+    return json({ preferences, version: row?.version ?? 1 });
+  }
+
+  if (path === "/api/settings/webhook") {
+    if (method !== "GET" && !csrf(request, env)) return error("Cross-site request rejected", 403, "CSRF");
+    const user = await requireAuth(request, env);
+    if (method === "GET") return json({ configured: await webhookConfigured(env.DB, user.id) });
+    if (method === "DELETE") {
+      await env.DB.prepare("DELETE FROM incoming_call_webhooks WHERE user_id=?1").bind(user.id).run();
+      return json({ configured: false });
+    }
+    if (method === "PUT") {
+      if (!env.SPARKCALL_WEBHOOK_ENCRYPTION_KEY) return error("Webhook is not configured", 503, "WEBHOOK_UNAVAILABLE");
+      const input = await body(request);
+      const url = validateWebhookUrl(input.url);
+      await validateResolvedHost(url);
+      await saveWebhook(env, user.id, url);
+      return json({ configured: true });
+    }
+    return error("Method not allowed", 405, "METHOD_NOT_ALLOWED");
   }
 
   if (path === "/api/contacts") {
@@ -497,13 +525,35 @@ async function route(request: Request, env: Env): Promise<Response> {
     const user = await requireAuth(request, env);
     if (!env.TURN_KEY_ID || !env.TURN_API_TOKEN) return error("TURN is not configured", 503, "TURN_UNAVAILABLE");
     const ttl = Math.max(60, Math.min(86_400, Number(env.TURN_CREDENTIAL_TTL_SECONDS) || 3600));
-    const response = await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${encodeURIComponent(env.TURN_KEY_ID)}/credentials/generate-ice-servers`, {
-      method: "POST",
-      headers: { authorization: `Bearer ${env.TURN_API_TOKEN}`, "content-type": "application/json" },
-      body: JSON.stringify({ ttl, customIdentifier: user.id }),
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), TURN_PROVIDER_TIMEOUT_MS);
+    let response: Response;
+    try {
+      response = await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${encodeURIComponent(env.TURN_KEY_ID)}/credentials/generate-ice-servers`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${env.TURN_API_TOKEN}`, "content-type": "application/json" },
+        body: JSON.stringify({ ttl, customIdentifier: user.id }),
+        signal: controller.signal,
+      });
+    } catch {
+      return error("TURN credential service unavailable", 503, "TURN_UNAVAILABLE");
+    } finally {
+      clearTimeout(timeout);
+    }
     if (!response.ok) return error("TURN credential service unavailable", 503, "TURN_UNAVAILABLE");
-    const data = await response.json() as { iceServers?: RTCIceServer[] };
+    const contentLength = Number(response.headers.get("content-length"));
+    if (Number.isFinite(contentLength) && contentLength > TURN_PROVIDER_MAX_RESPONSE_BYTES) {
+      await response.body?.cancel();
+      return error("TURN credential response was invalid", 502, "TURN_INVALID_RESPONSE");
+    }
+    let data: { iceServers?: RTCIceServer[] };
+    try {
+      const responseBody = await response.text();
+      if (new TextEncoder().encode(responseBody).byteLength > TURN_PROVIDER_MAX_RESPONSE_BYTES) return error("TURN credential response was invalid", 502, "TURN_INVALID_RESPONSE");
+      data = JSON.parse(responseBody) as { iceServers?: RTCIceServer[] };
+    } catch {
+      return error("TURN credential response was invalid", 502, "TURN_INVALID_RESPONSE");
+    }
     if (!Array.isArray(data.iceServers)) return error("TURN credential response was invalid", 502, "TURN_INVALID_RESPONSE");
     return json({ iceServers: data.iceServers, expiresAt: new Date(Date.now() + ttl * 1000).toISOString() });
   }

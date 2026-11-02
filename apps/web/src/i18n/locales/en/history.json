@@ -9,7 +9,7 @@
   "fields": { "participant": "Participant", "direction": "Direction", "status": "Status", "duration": "Duration", "started": "Started", "ended": "Ended" },
   "direction": { "incoming": "Incoming", "outgoing": "Outgoing" },
   "status": { "connected": "Connected", "ended": "Ended", "timeout": "Timed out", "rejected": "Rejected", "failed": "Failed", "busy": "Busy" },
-  "actions": { "back": "Call history", "callAgain": "Call again", "createRecord": "Create call record" },
+  "actions": { "retry": "Try again", "back": "Call history", "callAgain": "Call again", "createRecord": "Create call record" },
   "states": { "loading": "Loading call history…" },
   "empty": { "title": "No calls found", "detail": "Try a different filter or place your first call.", "detailTitle": "Call not found", "detailDescription": "This call is no longer available." },
   "errors": { "load": "Could not load call history. {{detail}}", "loadDetail": "Could not load call details. {{detail}}" },

@@ -19,6 +19,7 @@ export interface IncomingCallInvite {
   expiresAt: number;
 }
 export interface AudioOptions {
+  forceTurn?: boolean;
   echoCancellation?: boolean;
   noiseSuppression?: boolean;
   autoGainControl?: boolean;
@@ -37,6 +38,8 @@ export interface CallControllerOptions {
   onIncomingCall?: (invite: IncomingCallInvite) => void;
   onIncomingCallEnded?: (callId: string) => void;
   onPresenceChange?: (online: boolean) => void;
+  onAudioPlaybackBlocked?: () => void;
+  onAudioPlaybackRecovered?: () => void;
   onError?: (error: Error) => void;
 }
 
@@ -66,6 +69,7 @@ export class CallController {
   private remoteStream = new MediaStream();
   private remoteAudio?: HTMLAudioElement;
   private id: string | null = null;
+  private cancelRequest?: { callId: string; promise: Promise<void> };
   private role: "caller" | "callee" | null = null;
   private state: CallState = "IDLE";
   private muted = false;
@@ -83,7 +87,7 @@ export class CallController {
 
   constructor(options: CallControllerOptions = {}) {
     this.options = options;
-    this.audio = { echoCancellation: true, noiseSuppression: true, autoGainControl: true, bitrateMode: "standard", bitrateKbps: 32, ...options.audio };
+    this.audio = { forceTurn: false, echoCancellation: true, noiseSuppression: true, autoGainControl: true, bitrateMode: "standard", bitrateKbps: 32, ...options.audio };
   }
 
   get snapshot(): CallSnapshot { return this.currentSnapshot(); }
@@ -230,12 +234,21 @@ export class CallController {
     this.remoteAudio = element;
     element.autoplay = true;
     element.srcObject = this.remoteStream;
-    void element.play().catch(() => undefined);
+    void this.playRemoteAudio();
     void this.applyAudioOutputPreference().catch(() => undefined);
   }
 
+  async resumeRemoteAudio(): Promise<void> {
+    await this.playRemoteAudio();
+  }
+
   hangup(): void { this.finishLocally("ENDED", "hangup"); }
-  cancel(): void { this.finishLocally("CANCELLED", "cancel"); }
+  cancel(): void {
+    const callId = this.id;
+    this.finishLocally("CANCELLED", "cancel");
+    if (!callId || this.cancelRequest?.callId === callId) return;
+    this.cancelRequest = { callId, promise: this.requestServerCancellation(callId) };
+  }
 
   destroy(): void {
     this.presenceStopped = true;
@@ -309,9 +322,21 @@ export class CallController {
     if (generation !== this.generation) { stream.getTracks().forEach((track) => track.stop()); return; }
     for (const track of stream.getAudioTracks()) track.enabled = !this.muted;
     this.localStream = stream;
-    const servers = this.options.iceServers ?? await this.fetchTurnServers();
+    let servers = this.options.iceServers;
+    if (servers === undefined) {
+      try {
+        servers = await this.fetchTurnServers();
+      } catch (error) {
+        if (this.audio.forceTurn) {
+          const cause = normalizeError(error);
+          cause.message = `Relay-only calling is unavailable because TURN credentials could not be loaded. ${cause.message}`;
+          throw cause;
+        }
+        servers = [];
+      }
+    }
     if (generation !== this.generation) { stream.getTracks().forEach((track) => track.stop()); return; }
-    this.peer = new RTCPeerConnection({ iceServers: servers });
+    this.peer = new RTCPeerConnection({ iceServers: servers, iceTransportPolicy: this.audio.forceTurn ? "relay" : "all" });
     for (const track of stream.getTracks()) {
       track.enabled = !this.muted;
       this.peer.addTrack(track, stream);
@@ -321,7 +346,7 @@ export class CallController {
     this.peer.ontrack = (event) => {
       const tracks = event.streams[0]?.getTracks() ?? [event.track];
       for (const track of tracks) if (!this.remoteStream.getTracks().some((existing) => existing.id === track.id)) this.remoteStream.addTrack(track);
-      if (this.remoteAudio) { this.remoteAudio.srcObject = this.remoteStream; void this.remoteAudio.play().catch(() => undefined); }
+      if (this.remoteAudio) { this.remoteAudio.srcObject = this.remoteStream; void this.playRemoteAudio(); }
     };
     this.peer.onconnectionstatechange = () => {
       const state = this.peer?.connectionState;
@@ -433,6 +458,15 @@ export class CallController {
     const output = this.remoteAudio as HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> };
     if (output.setSinkId) await output.setSinkId(this.audio.audioOutputDeviceId);
   }
+  private async playRemoteAudio(): Promise<void> {
+    if (!this.remoteAudio) return;
+    try {
+      await this.remoteAudio.play();
+      this.options.onAudioPlaybackRecovered?.();
+    } catch {
+      this.options.onAudioPlaybackBlocked?.();
+    }
+  }
   private async applyBitrate(): Promise<void> {
     if (!this.peer) return;
     const mode = this.audio.bitrateMode ?? "standard";
@@ -527,6 +561,25 @@ export class CallController {
     this.connectedAt = 0;
     this.pendingCandidates = [];
   }
+
+  private async requestServerCancellation(callId: string): Promise<void> {
+    const endpoint = `/api/calls/${encodeURIComponent(callId)}/cancel`;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const response = await fetch(endpoint, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: "{}",
+        });
+        if (response.ok || response.status === 404 || response.status === 409 || response.status < 500 || attempt === 1) return;
+      } catch {
+        if (attempt === 1) return;
+      }
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 250));
+    }
+  }
+
 }
 
 export default CallController;

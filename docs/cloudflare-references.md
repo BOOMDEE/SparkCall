@@ -22,4 +22,4 @@ Cloudflare resource endpoint shapes and required permission labels were checked 
 - Worker module upload uses `PUT /accounts/{account_id}/workers/scripts/{script_name}`; Worker secret bindings use `PUT /accounts/{account_id}/workers/scripts/{script_name}/secrets`. The schema labels both writes `Workers Scripts Write`.
 - TURN key management uses `/accounts/{account_id}/calls/turn_keys`; the schema labels read/write permissions `Calls Read` and `Calls Write`.
 
-The initial Cloudflare environment now includes the newly created APAC `sparkcall-db` database with both checked-in migrations applied. No user records have been written. Cloudflare credentials remain outside the repository; the initial Worker/domain rollout is handled separately from the reusable GitHub Actions workflow.
+This document records service and API contracts, not the current state of any Cloudflare account. Account identifiers, credentials, and production-resource status are intentionally excluded; verify remote resources in the owning account before applying a migration or deployment.

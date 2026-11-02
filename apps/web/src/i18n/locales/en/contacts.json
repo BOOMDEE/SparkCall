@@ -9,6 +9,7 @@
     "addFirst": "Add your first contact",
     "back": "Back to contacts",
     "saveChanges": "Save changes",
+    "retry": "Try again",
     "call": "Call",
     "block": "Block",
     "delete": "Delete",
@@ -56,6 +57,6 @@
     "delete": "Could not delete the contact.",
     "block": "Could not block this contact."
   },
-  "confirm": { "delete": "Delete this contact? This cannot be undone." },
+  "confirm": { "delete": "Delete this contact? This cannot be undone.", "block": "Block {{name}}? Incoming calls from this contact will be rejected." },
   "detailPage": { "eyebrow": "Contact", "title": "Contact details" }
 }

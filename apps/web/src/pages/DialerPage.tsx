@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Mic, MicOff, PhoneCall, PhoneOff, RefreshCw, ShieldCheck, Volume2 } from "lucide-react";
@@ -26,6 +26,7 @@ export default function DialerPage() {
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [deviceError, setDeviceError] = useState<string | null>(null);
   const session = useCallSession();
+  const callAttemptRef = useRef(0);
   const call = session.snapshot;
   const active = !TERMINAL_STATES.has(call.state);
   const peerName = call.role === "caller"
@@ -45,7 +46,8 @@ export default function DialerPage() {
       setError(t("errors.missingNumber"));
       return;
     }
-    if (!session.controller) return;
+    if (!session.controller || !session.preferencesReady) return;
+    const attempt = ++callAttemptRef.current;
     setError(null);
     setRequesting(true);
     let callId: string | undefined;
@@ -58,12 +60,24 @@ export default function DialerPage() {
       await session.controller.startOutgoing(created.callId, created.userId);
     } catch (cause) {
       if (callId) {
-        await api(`/api/calls/${encodeURIComponent(callId)}/cancel`, { method: "POST" }).catch(() => undefined);
+        await cancelServerCall(callId);
       }
-      setError(errorMessage(cause, t, "errors.callFailed"));
+      if (attempt === callAttemptRef.current) setError(errorMessage(cause, t, "errors.callFailed"));
     } finally {
-      setRequesting(false);
+      if (attempt === callAttemptRef.current) setRequesting(false);
     }
+  }
+
+  function cancelServerCall(callId: string): Promise<void> {
+    return api(`/api/calls/${encodeURIComponent(callId)}/cancel`, { method: "POST" })
+      .then(() => undefined)
+      .catch(() => undefined);
+  }
+
+  function cancelOutgoing() {
+    callAttemptRef.current += 1;
+    setRequesting(false);
+    session.controller?.cancel();
   }
 
   async function refreshDevices() {
@@ -122,9 +136,10 @@ export default function DialerPage() {
           />
           <p id="dialer-number-hint" className="mt-2 text-xs leading-5 text-neutral-500">{t("form.numberHint")}</p>
           {error && <div className="mt-4"><Notice>{error}</Notice></div>}
+          {!session.preferencesReady && <div className="mt-4"><Notice>{t(session.preferenceLoadError ? "errors.preferencesFailed" : "errors.preferencesLoading")} {session.preferenceLoadError && <Button variant="ghost" className="ml-2 px-2 py-1" onClick={session.retryPreferences}><RefreshCw size={14} aria-hidden="true" />{t("actions.retry")}</Button>}</Notice></div>}
           {session.error && <div className="mt-4"><Notice>{t("errors.session", { detail: session.error })}</Notice></div>}
           <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
-            <Button type="submit" className="sm:min-w-36" disabled={requesting || !session.controller}>
+            <Button type="submit" className="sm:min-w-36" disabled={requesting || !session.controller || !session.preferencesReady}>
               <PhoneCall size={16} aria-hidden="true" />{requesting ? t("form.connecting") : t("form.call")}
             </Button>
             <p className="flex items-center gap-2 text-xs text-neutral-500"><ShieldCheck size={14} aria-hidden="true" />{t("form.privacyNote")}</p>
@@ -143,7 +158,7 @@ export default function DialerPage() {
               {call.muted ? <MicOff size={16} aria-hidden="true" /> : <Mic size={16} aria-hidden="true" />}
               {call.muted ? t("actions.unmute") : t("actions.mute")}
             </Button>
-            <Button variant="danger" onClick={() => call.role === "caller" && call.state !== "CONNECTED" ? session.controller?.cancel() : session.controller?.hangup()}>
+            <Button variant="danger" onClick={() => call.role === "caller" && call.state !== "CONNECTED" ? cancelOutgoing() : session.controller?.hangup()}>
               <PhoneOff size={16} aria-hidden="true" />{call.role === "caller" && call.state !== "CONNECTED" ? t("actions.cancel") : t("actions.hangUp")}
             </Button>
           </div>

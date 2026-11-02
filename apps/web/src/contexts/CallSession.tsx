@@ -1,10 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { api, type IncomingCallInvite, type UserPreferences } from "../lib/api";
+import { useTranslation } from "react-i18next";
+import { api, type IncomingCallInvite, type PreferenceSnapshot, type UserPreferences } from "../lib/api";
 import { CallController, type CallSnapshot } from "../lib/webrtc";
 import { AccessibleDialog, Button, Notice } from "../components/ui";
-import { Phone, PhoneOff } from "lucide-react";
+import { Phone, PhoneOff, RefreshCw } from "lucide-react";
 
 const DEFAULT_PREFERENCES: UserPreferences = {
+  forceTurn: false,
   echoCancellation: true, noiseSuppression: true, autoGainControl: true,
   audioInputDeviceId: "", audioOutputDeviceId: "", bitrateMode: "standard", bitrateKbps: 32,
   allowIncoming: true, showOnlineStatus: true, theme: "system",
@@ -16,11 +18,16 @@ type CallSessionValue = {
   incoming: IncomingCallInvite | null;
   peer: IncomingCallInvite | null;
   preferences: UserPreferences;
+  preferencesReady: boolean;
+  preferenceLoadError: boolean;
+  retryPreferences: () => void;
   error: string | null;
   clearError: () => void;
   updatePreferences: (patch: Partial<UserPreferences>) => Promise<void>;
   acceptIncoming: () => Promise<void>;
   rejectIncoming: () => Promise<void>;
+  audioPlaybackBlocked: boolean;
+  resumeRemoteAudio: () => Promise<void>;
 };
 const CallSessionContext = createContext<CallSessionValue | null>(null);
 const IDLE: CallSnapshot = { id: null, state: "IDLE", role: null, durationMs: 0, muted: false, connectionState: "new" };
@@ -33,16 +40,25 @@ export function useCallSession() {
 }
 
 export function CallSessionProvider({ children }: { children: ReactNode }) {
+  const { t } = useTranslation("dialer");
   const controllerRef = useRef<CallController | null>(null);
   const incomingRef = useRef<IncomingCallInvite | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const loadPreferencesRef = useRef<(() => Promise<void>) | null>(null);
+  const preferenceRequestRef = useRef(0);
+  const preferenceMutationRef = useRef(0);
+  const preferenceVersionRef = useRef(0);
+  const preferenceWriteQueueRef = useRef<Promise<void>>(Promise.resolve());
   const [controller, setController] = useState<CallController | null>(null);
   const [snapshot, setSnapshot] = useState(IDLE);
   const [online, setOnline] = useState(false);
   const [incoming, setIncomingState] = useState<IncomingCallInvite | null>(null);
   const [peer, setPeer] = useState<IncomingCallInvite | null>(null);
   const [preferences, setPreferences] = useState(DEFAULT_PREFERENCES);
+  const [preferencesReady, setPreferencesReady] = useState(false);
+  const [preferenceLoadError, setPreferenceLoadError] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [audioPlaybackBlocked, setAudioPlaybackBlocked] = useState(false);
   const setIncoming = useCallback((invite: IncomingCallInvite | null) => {
     incomingRef.current = invite;
     setIncomingState(invite);
@@ -67,24 +83,52 @@ export function CallSessionProvider({ children }: { children: ReactNode }) {
       },
       onIncomingCallEnded: (callId) => { if (incomingRef.current?.callId === callId) setIncoming(null); },
       onPresenceChange: (value) => { if (active) setOnline(value); },
+      onAudioPlaybackBlocked: () => { if (active) setAudioPlaybackBlocked(true); },
+      onAudioPlaybackRecovered: () => { if (active) setAudioPlaybackBlocked(false); },
       onError: (cause) => { if (active) setError(cause.message); },
     });
     controllerRef.current = callController;
     setController(callController);
     if (audioRef.current) callController.attachRemoteAudio(audioRef.current);
-    void api<UserPreferences>("/api/settings/preferences").then(async (saved) => {
-      if (!active) return;
-      const next = { ...DEFAULT_PREFERENCES, ...saved };
-      setPreferences(next);
-      await callController.updateAudioOptions(next);
-    }).catch(() => undefined);
+
+    loadPreferencesRef.current = async () => {
+      const request = ++preferenceRequestRef.current;
+      const mutationVersion = preferenceMutationRef.current;
+      setPreferencesReady(false);
+      setPreferenceLoadError(false);
+      try {
+        const saved = await api<PreferenceSnapshot>("/api/settings/preferences");
+        if (!active || request !== preferenceRequestRef.current || mutationVersion !== preferenceMutationRef.current) return;
+        const version = Number.isSafeInteger(saved.version) ? saved.version : 0;
+        if (version < preferenceVersionRef.current) {
+          setPreferenceLoadError(false);
+          setPreferencesReady(true);
+          return;
+        }
+        const next = { ...DEFAULT_PREFERENCES, ...saved.preferences };
+        await callController.updateAudioOptions(next);
+        if (!active || request !== preferenceRequestRef.current || mutationVersion !== preferenceMutationRef.current) return;
+        preferenceVersionRef.current = version;
+        setPreferences(next);
+        setPreferencesReady(true);
+      } catch {
+        if (active && request === preferenceRequestRef.current) {
+          setPreferencesReady(false);
+          setPreferenceLoadError(true);
+        }
+      }
+    };
+    void loadPreferencesRef.current();
     void callController.connectPresence().catch((cause) => {
       if (active) setError(cause instanceof Error ? cause.message : "Presence connection failed.");
     });
     return () => {
       active = false;
+      preferenceRequestRef.current += 1;
+      loadPreferencesRef.current = null;
       callController.destroy();
       controllerRef.current = null;
+      setAudioPlaybackBlocked(false);
       setController(null);
     };
   }, [setIncoming]);
@@ -97,21 +141,40 @@ export function CallSessionProvider({ children }: { children: ReactNode }) {
     return () => window.clearTimeout(timeout);
   }, [incoming, setIncoming]);
 
-  const updatePreferences = useCallback(async (patch: Partial<UserPreferences>) => {
-    const saved = await api<UserPreferences>("/api/settings/preferences", { method: "PATCH", body: JSON.stringify(patch) });
-    const next = { ...DEFAULT_PREFERENCES, ...saved };
-    setPreferences(next);
-    await controllerRef.current?.updateAudioOptions(next);
+  const retryPreferences = useCallback(() => { void loadPreferencesRef.current?.(); }, []);
+  const updatePreferences = useCallback((patch: Partial<UserPreferences>) => {
+    preferenceMutationRef.current += 1;
+    preferenceRequestRef.current += 1;
+    const operation = preferenceWriteQueueRef.current.then(async () => {
+      const saved = await api<PreferenceSnapshot>("/api/settings/preferences", { method: "PATCH", body: JSON.stringify({ ...patch }) });
+      const version = Number.isSafeInteger(saved.version) ? saved.version : preferenceVersionRef.current + 1;
+      if (version < preferenceVersionRef.current) return;
+      const next = { ...DEFAULT_PREFERENCES, ...saved.preferences };
+      preferenceVersionRef.current = version;
+      setPreferences(next);
+      setPreferenceLoadError(false);
+      setPreferencesReady(true);
+      await controllerRef.current?.updateAudioOptions(next);
+    });
+    preferenceWriteQueueRef.current = operation.then(() => undefined, () => undefined);
+    return operation;
   }, []);
   const acceptIncoming = useCallback(async () => {
     const invite = incomingRef.current;
-    if (!invite) return;
+    if (!invite || !preferencesReady) return;
     // Keep identity after the prompt disappears so controls and the dialer can render it.
     setPeer(invite);
     setIncoming(null);
     try { await controllerRef.current?.acceptIncoming(invite.callId); }
     catch (cause) { setError(cause instanceof Error ? cause.message : "Could not accept the call."); }
-  }, [setIncoming]);
+  }, [preferencesReady, setIncoming]);
+  const resumeRemoteAudio = useCallback(async () => {
+    try {
+      await controllerRef.current?.resumeRemoteAudio();
+    } catch {
+      setAudioPlaybackBlocked(true);
+    }
+  }, []);
   const rejectIncoming = useCallback(async () => {
     const invite = incomingRef.current;
     if (!invite) return;
@@ -120,21 +183,26 @@ export function CallSessionProvider({ children }: { children: ReactNode }) {
   }, [setIncoming]);
 
   const value = useMemo<CallSessionValue>(() => ({
-    controller, snapshot, online, incoming, peer, preferences, error, clearError,
-    updatePreferences, acceptIncoming, rejectIncoming,
-  }), [controller, snapshot, online, incoming, peer, preferences, error, clearError, updatePreferences, acceptIncoming, rejectIncoming]);
+    controller, snapshot, online, incoming, peer, preferences, preferencesReady, preferenceLoadError,
+    retryPreferences, error, clearError, updatePreferences, acceptIncoming, rejectIncoming, audioPlaybackBlocked, resumeRemoteAudio,
+  }), [controller, snapshot, online, incoming, peer, preferences, preferencesReady, preferenceLoadError, retryPreferences, error, clearError, updatePreferences, acceptIncoming, rejectIncoming, audioPlaybackBlocked, resumeRemoteAudio]);
 
   return <CallSessionContext.Provider value={value}>
     {children}
-    <audio ref={audioRef} className="sr-only" autoPlay aria-label="Call audio" />
+    <audio ref={audioRef} className="sr-only" autoPlay aria-label={t("incomingDialog.audioLabel")} />
+    {audioPlaybackBlocked && <div className="fixed inset-x-4 bottom-4 z-30 mx-auto flex max-w-lg items-center justify-between gap-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950 shadow-lg dark:border-amber-700 dark:bg-amber-950 dark:text-amber-50" role="alert">
+      <span>{t("audio.playbackBlocked")}</span>
+      <Button variant="secondary" className="shrink-0" onClick={() => void resumeRemoteAudio()}>{t("audio.enablePlayback")}</Button>
+    </div>}
     <AccessibleDialog open={Boolean(incoming)} onClose={() => void rejectIncoming()} titleId="incoming-call-title" className="w-full max-w-sm rounded-lg border border-neutral-200 bg-white p-6 shadow-xl dark:border-neutral-800 dark:bg-neutral-950">
-      <div className="grid h-10 w-10 place-items-center rounded-full bg-neutral-100 dark:bg-neutral-900"><Phone size={18} /></div>
-      <h2 id="incoming-call-title" className="mt-4 text-lg font-semibold">Incoming call</h2>
+      <div className="grid h-10 w-10 place-items-center rounded-full bg-neutral-100 dark:bg-neutral-900"><Phone size={18} aria-hidden="true" /></div>
+      <h2 id="incoming-call-title" className="mt-4 text-lg font-semibold">{t("incomingDialog.title")}</h2>
       <p className="mt-1 text-sm text-neutral-500">{incoming?.callerName} · {incoming?.callerNumber}</p>
+      {!preferencesReady && <div className="mt-4"><Notice>{t(preferenceLoadError ? "incomingDialog.preferencesFailed" : "incomingDialog.preferencesLoading")}{preferenceLoadError && <Button variant="ghost" className="ml-2 px-2 py-1" onClick={retryPreferences}><RefreshCw size={14} aria-hidden="true" />{t("incomingDialog.retry")}</Button>}</Notice></div>}
       {error && <div className="mt-4"><Notice>{error}</Notice></div>}
       <div className="mt-6 flex justify-end gap-2">
-        <Button variant="secondary" onClick={() => void rejectIncoming()}><PhoneOff size={16} /> Decline</Button>
-        <Button onClick={() => void acceptIncoming()}><Phone size={16} /> Answer</Button>
+        <Button variant="secondary" onClick={() => void rejectIncoming()}><PhoneOff size={16} aria-hidden="true" /> {t("incomingDialog.decline")}</Button>
+        <Button disabled={!preferencesReady} onClick={() => void acceptIncoming()}><Phone size={16} aria-hidden="true" /> {t("incomingDialog.answer")}</Button>
       </div>
     </AccessibleDialog>
   </CallSessionContext.Provider>;

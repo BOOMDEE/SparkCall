@@ -3,8 +3,9 @@
   "name": "sparkcall",
   "main": "workers/api/src/index.ts",
   "compatibility_date": "2026-11-02",
+  "compatibility_flags": ["global_fetch_strictly_public"],
   "upload_source_maps": true,
-  "workers_dev": true,
+  "workers_dev": false,
   "routes": [
     { "pattern": "app.example.com", "custom_domain": true }
   ],
