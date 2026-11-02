@@ -1,0 +1,28 @@
+name: Test
+
+on:
+  push:
+    branches: [Main]
+  pull_request:
+    branches: [Main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Typecheck, lint, tests, build, migrations
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run quality
+      - name: Verify local D1 migrations
+        run: npx wrangler d1 migrations apply sparkcall-db --local
+        env:
+          CI: "1"

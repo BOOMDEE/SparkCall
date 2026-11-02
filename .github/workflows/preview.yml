@@ -1,0 +1,27 @@
+name: Preview build
+
+on:
+  pull_request:
+    branches: [Main]
+
+permissions:
+  contents: read
+
+jobs:
+  preview:
+    name: Build review artifact
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run quality
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sparkcall-preview-${{ github.event.pull_request.number }}
+          path: apps/web/dist/
+          if-no-files-found: error
+          retention-days: 7

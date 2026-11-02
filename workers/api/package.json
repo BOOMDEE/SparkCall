@@ -1,0 +1,9 @@
+{
+  "name": "@sparkcall/worker",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "check": "tsc -p tsconfig.json"
+  }
+}

@@ -1,0 +1,18 @@
+# Copy to .dev.vars for local development. Keep real values out of Git.
+# Cloudflare Realtime TURN key ID and TURN key API token; optional for local tests.
+TURN_KEY_ID=
+TURN_API_TOKEN=
+# Account-level Analytics token for Cloudflare Realtime TURN GraphQL queries.
+TURN_ANALYTICS_API_TOKEN=
+CLOUDFLARE_ACCOUNT_ID=
+# Random high-entropy internal secret shared only by this Worker and its DOs.
+SPARKCALL_INTERNAL_TOKEN=
+# Set to http://localhost:5173 when using Vite; leave blank for same-origin Wrangler dev.
+ALLOWED_ORIGIN=
+SESSION_TTL_SECONDS=2592000
+TEMP_SESSION_TTL_SECONDS=86400
+TURN_CREDENTIAL_TTL_SECONDS=3600
+# Example display quota only (5 GB in decimal bytes; not an automatic call limit).
+TURN_MONTHLY_QUOTA_BYTES=5000000000
+# Optional comma-separated immutable SparkCall user IDs allowed to read platform totals.
+ADMIN_USER_IDS=

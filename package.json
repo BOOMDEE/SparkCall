@@ -1,0 +1,35 @@
+{
+  "name": "sparkcall",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "apps/web",
+    "workers/api"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev --workspace @sparkcall/web",
+    "dev:worker": "wrangler dev",
+    "build": "npm run build --workspace @sparkcall/web",
+    "check": "npm run check --workspace @sparkcall/web && npm run check --workspace @sparkcall/worker",
+    "lint": "eslint apps/web/src workers/api/src",
+    "test": "vitest run",
+    "quality": "npm run check && npm run lint && npm test && npm run build",
+    "deploy": "wrangler deploy",
+    "db:migrate:local": "wrangler d1 migrations apply sparkcall-db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply sparkcall-db --remote",
+    "wrangler:types": "wrangler types"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20261102.1",
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.14.0",
+    "globals": "^16.5.0",
+    "typescript-eslint": "^8.46.2",
+    "vitest": "^5.0.5",
+    "wrangler": "4.156.1"
+  }
+}
