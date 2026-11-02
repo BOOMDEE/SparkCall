@@ -48,6 +48,16 @@ The following list describes checked-in behavior only. / 以下仅列出当前�
 
 Not implemented or not enabled: audio recording, R2 avatar/upload storage, payments/3DS, a public production service, and automatic TURN quota blocking. / 尚未实现或启用：音频录制、R2 头像/上传存储、支付/3DS、公开生产服务和自动阻断 TURN 配额超限。
 
+## Dashboard preview / 工作台预览
+
+The dashboard below shows the authenticated workspace after registration, with a synthetic SparkCall number and contact. / 以下截图展示注册后的已登录工作台，包含合成的 SparkCall 号码和联系人。
+
+![Authenticated SparkCall dashboard after registration, with synthetic account and contact data / 注册后工作台截图，包含合成账号和联系人数据](docs/assets/dashboard-preview-zh.png)
+
+Captured locally after registering a synthetic preview account and adding a synthetic contact. The identity, number, and contact are fictional; no real credentials, personal account data, or call records are shown. This screenshot is for interface preview and does not indicate a production deployment.
+
+该截图在本地注册合成预览账号并添加合成联系人后获取。身份、号码和联系人均为虚构；未展示真实凭据、个人账号资料或通话记录。此图仅用于界面预览，不表示已部署生产环境。
+
 ## Architecture / 架构
 
 ```text
