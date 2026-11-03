@@ -11,7 +11,7 @@ vi.mock("./database", () => ({
   json: (value: unknown, status = 200) => new Response(JSON.stringify(value), { status }),
 }));
 
-const { SparkCallDurableObject } = await import("./signaling");
+const { SparkCallDurableObject, SparkCallPresenceObject } = await import("./signaling");
 
 describe("Durable Object terminal call cleanup", () => {
   it("closes sockets, unregisters presence and deletes call and queued signaling state", async () => {
@@ -58,5 +58,35 @@ describe("Durable Object terminal call cleanup", () => {
     }));
     expect(storage.delete).toHaveBeenCalledWith(["call", "queue:caller", "queue:callee"]);
     expect(state.size).toBe(0);
+  });
+});
+
+describe("Presence invite expiration", () => {
+  it("records an unanswered call as missed as soon as its invite expires", async () => {
+    const invite = { callId: "call-123", calleeId: "user-b", callerNumber: "SC-A", callerName: "Caller", createdAt: 1, expiresAt: Date.now() - 1 };
+    const entries = new Map<string, unknown>([[`invite:${invite.callId}`, invite]]);
+    const storage = {
+      list: vi.fn(async () => new Map(entries)),
+      delete: vi.fn(async (key: string) => entries.delete(key)),
+      setAlarm: vi.fn(async () => undefined),
+    };
+    const run = vi.fn(async () => ({ success: true }));
+    const bind = vi.fn(() => ({ run }));
+    let preparedSql = "";
+    const prepare = vi.fn((sql: string) => { preparedSql = sql; return { bind }; });
+    const ctx = { storage, getWebSockets: () => [] };
+    const instance = Object.assign(Object.create(SparkCallPresenceObject.prototype), {
+      ctx,
+      env: { DB: { prepare } },
+      authorizedSockets: vi.fn(async () => []),
+    }) as unknown as { alarm(): Promise<void> };
+
+    await instance.alarm();
+
+    expect(preparedSql).toContain("status='timeout'");
+    expect(preparedSql).toContain("recipient_id=?2 AND status='calling'");
+    expect(bind).toHaveBeenCalledWith(invite.callId, invite.calleeId);
+    expect(run).toHaveBeenCalledOnce();
+    expect(entries.has(`invite:${invite.callId}`)).toBe(false);
   });
 });

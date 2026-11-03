@@ -13,6 +13,8 @@ unreleased development version; this file does not announce a production rollout
   server-issued TURN credentials and optional sampled usage analytics.
 - Authentication, validation and call-entry unit tests plus an isolated local
   Worker/D1 HTTP integration runner in CI.
+- Browser-local do-not-disturb and optional generic missed-call notifications;
+  expired unanswered invitations now settle promptly in call history.
 - Bilingual project and contribution documentation, security/conduct policies,
   coding Agent instructions, issue/PR templates and formatting conventions.
 
@@ -27,4 +29,5 @@ unreleased development version; this file does not announce a production rollout
 
 - Real cross-network audio, TURN relay paths, multi-device concurrency and
   production Durable Object lifecycle behavior require separate acceptance tests.
-- Production deployment is paused; no public service or tagged release is claimed.
+- A pre-release public preview exists; no production SLA, cross-network audio
+  acceptance, or tagged release is claimed.

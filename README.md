@@ -53,6 +53,7 @@ The following describes checked-in behavior, not a product roadmap. / 以下描�
 | Upgrade a temporary identity to a permanent account while retaining eligible identity, contacts, and records. | 将临时身份升级为永久账号，并保留符合条件的身份、联系人和记录。 |
 | Case-insensitive usernames; case-sensitive SparkCall numbers with availability checks and reserved names. | 用户名不区分大小写；SparkCall 号码区分大小写，并支持可用性检查与保留名称。 |
 | Browser WebRTC audio calls with incoming invitations, accept, reject, busy, cancel, hang up, timeout, failure, and short reconnect handling. | 浏览器 WebRTC 音频通话，支持来电、接听、拒绝、忙线、取消、挂断、超时、失败和短时重连。 |
+| Browser-local do-not-disturb hides incoming-call pop-ups without declining; optional generic missed-call notifications require browser permission and an open, connected tab. | 浏览器本地免打扰仅隐藏来电弹窗，不会自动拒接；可选的通用未接提醒需要浏览器授权，且页面保持打开并连接。 |
 | Authenticated WebSocket signaling for SDP offers/answers and ICE candidates, plus a separate presence object for invitations. | 经过认证的 WebSocket 信令用于 SDP offer/answer 和 ICE candidate；独立 presence 对象传递来电。 |
 | Microphone mute, input-device selection, echo cancellation, noise suppression, automatic gain control, bitrate preferences, and supported output-device selection. | 麦克风静音、输入设备选择、回声消除、噪声抑制、自动增益、码率偏好，以及在浏览器支持时选择输出设备。 |
 | Contacts with names, notes, favorites, lookup, update, delete, and blocked-number/user management. | 联系人名称、备注、收藏、查询、修改、删除，以及号码/用户黑名单管理。 |
@@ -64,9 +65,9 @@ The following describes checked-in behavior, not a product roadmap. / 以下描�
 
 ## Dashboard preview / 工作台预览
 
-The screenshot below is the approved local preview. It contains synthetic account and contact data and does not indicate a live or production deployment.
+The screenshot below is an approved local preview using synthetic account and contact data; the screenshot itself does not indicate a live deployment or production readiness.
 
-以下是已批准的本地预览截图，使用合成账号和联系人数据，不表示在线或生产部署。
+以下是已批准的本地预览截图，使用合成账号和联系人数据；截图本身不代表在线部署或生产可用性。
 
 ![Authenticated SparkCall dashboard after registration, with synthetic account and contact data / 注册后工作台截图，包含合成账号和联系人数据](docs/assets/dashboard-preview-zh.png)
 

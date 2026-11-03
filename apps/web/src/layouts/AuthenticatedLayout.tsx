@@ -30,7 +30,7 @@ export function AuthenticatedLayout() {
   }, [location.pathname, navigate]);
   if (loading) return <div className="grid min-h-screen place-items-center text-sm text-neutral-500" role="status">{t("loading")}</div>;
   if (!me) return null;
-  return <CallSessionProvider><Workspace me={me} /></CallSessionProvider>;
+  return <CallSessionProvider userId={me.id}><Workspace me={me} /></CallSessionProvider>;
 }
 
 export function ActiveCallControls({ onOpenDialer }: { onOpenDialer: () => void }) {

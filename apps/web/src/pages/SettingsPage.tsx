@@ -7,7 +7,7 @@ import { api, type Me, type Usage, type UserPreferences } from "../lib/api";
 import { useResource } from "../hooks/useResource";
 import { formatBytes, formatDate } from "../lib/format";
 import { PageHeader } from "../components/common";
-import { Button, Card, Empty, Field, Notice } from "../components/ui";
+import { Button, Card, Field, Notice } from "../components/ui";
 
 type SectionId = "account" | "audio" | "privacy" | "notifications" | "webhook" | "appearance" | "usage";
 const SECTIONS: Array<{ id: SectionId; icon: typeof Settings2 }> = [
@@ -111,7 +111,51 @@ function WebhookSettings() {
     </>}
   </SectionCard>;
 }
-function NotificationsSettings() { const { t } = useTranslation("settings"); return <SectionCard title={t("notifications.title")} detail={t("notifications.detail")}><div className="mt-6"><Empty title={t("notifications.emptyTitle")} detail={t("notifications.emptyDetail")} /></div></SectionCard>; }
+function NotificationsSettings() {
+  const { t } = useTranslation("settings");
+  const { browserSettings, updateBrowserSettings } = useCallSession();
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  async function toggleMissedCallNotifications(enabled: boolean) {
+    setError(null);
+    if (!enabled) {
+      updateBrowserSettings({ missedCallNotifications: false });
+      return;
+    }
+    setSaving(true);
+    try {
+      if (typeof Notification === "undefined") {
+        setError(t("notifications.unsupported"));
+        return;
+      }
+      const permission = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
+      if (permission !== "granted") {
+        setError(t("notifications.permissionDenied"));
+        return;
+      }
+      updateBrowserSettings({ missedCallNotifications: true });
+    } catch {
+      setError(t("notifications.permissionDenied"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return <SectionCard title={t("notifications.title")} detail={t("notifications.detail")}>
+    {error && <div className="mt-4"><Notice>{error}</Notice></div>}
+    <div className="mt-6">
+      <label className="flex items-start justify-between gap-4 border-b border-neutral-100 py-4 dark:border-neutral-900">
+        <span><span className="block text-sm font-medium">{t("notifications.doNotDisturb")}</span><span className="mt-1 block text-xs leading-5 text-neutral-500">{t("notifications.doNotDisturbDetail")}</span></span>
+        <input type="checkbox" aria-label={t("notifications.doNotDisturb")} checked={browserSettings.doNotDisturb} onChange={(event) => updateBrowserSettings({ doNotDisturb: event.target.checked })} />
+      </label>
+      <label className="flex items-start justify-between gap-4 py-4">
+        <span><span className="block text-sm font-medium">{t("notifications.missedCalls")}</span><span className="mt-1 block text-xs leading-5 text-neutral-500">{t("notifications.missedCallsDetail")}</span></span>
+        <input type="checkbox" aria-label={t("notifications.missedCalls")} checked={browserSettings.missedCallNotifications} disabled={saving} onChange={(event) => void toggleMissedCallNotifications(event.target.checked)} />
+      </label>
+    </div>
+  </SectionCard>;
+}
 
 function UsageSettings() { const { t, i18n } = useTranslation("settings"); const resource = useResource<Usage>("/api/usage"), usage = resource.data; const platform = useResource<{ available: boolean; month: string; usedBytes: number | null; lastUpdated: string | null }>("/api/admin/usage"); const bytes = (value: number | null | undefined) => formatBytes(value) === "Unavailable" ? t("usage.unavailableValue") : formatBytes(value); const source = (value: string) => t(`usage.sources.${value}`, { defaultValue: t("usage.sources.unknown") }); const note = (value: string) => t(`usage.notes.${value}`, { defaultValue: value }); return <SectionCard title={t("usage.title")} detail={t("usage.detail")}>{resource.loading ? <p className="mt-6 text-sm text-neutral-500" role="status">{t("states.loading")}</p> : resource.error ? <div className="mt-4 space-y-3"><Notice>{t("errors.usage", { code: resource.error })}</Notice><Button variant="secondary" onClick={() => resource.refresh()}>{t("actions.retry")}</Button></div> : !usage?.available ? <div className="mt-5 rounded-md border border-neutral-200 p-4 text-sm leading-6 text-neutral-500 dark:border-neutral-800">{t("usage.unavailable")}</div> : <><div className="mt-6 grid gap-3 sm:grid-cols-3"><Metric label={t("usage.monthly")} value={bytes(usage.usedBytes)} /><Metric label={t("usage.quota")} value={bytes(usage.quotaBytes)} /><Metric label={t("usage.remaining")} value={bytes(usage.remainingBytes)} /></div>{usage.percentageUsed != null && <div className="mt-6"><div className="flex justify-between text-xs text-neutral-500"><span>{t("usage.quotaUsed")}</span><span>{usage.percentageUsed.toFixed(1)}%</span></div><div className="mt-2 h-2 rounded bg-neutral-100 dark:bg-neutral-900"><div className="h-2 rounded bg-neutral-900 dark:bg-neutral-100" style={{ width: `${Math.max(0, Math.min(100, usage.percentageUsed))}%` }} /></div></div>}<dl className="mt-6 grid gap-4 border-t border-neutral-200 pt-5 text-sm dark:border-neutral-800 sm:grid-cols-2"><Data label={t("usage.month")} value={usage.month} /><Data label={t("usage.lastUpdated")} value={formatDate(usage.lastUpdated, i18n.language)} /><Data label={t("usage.source")} value={source(usage.source)} /><Data label={t("usage.accounting")} value={usage.authoritative ? t("usage.authoritative") : t("usage.estimated")} /></dl><p className="mt-4 text-xs leading-5 text-neutral-500">{note(usage.note)}</p>{platform.data?.available && <div className="mt-7 border-t border-neutral-200 pt-5 dark:border-neutral-800"><h3 className="text-sm font-medium">{t("usage.platformTitle")}</h3><div className="mt-3 grid gap-4 sm:grid-cols-3"><Metric label={t("usage.month")} value={platform.data.month} /><Metric label={t("usage.egress")} value={bytes(platform.data.usedBytes)} /><Metric label={t("usage.lastUpdated")} value={formatDate(platform.data.lastUpdated, i18n.language)} /></div><p className="mt-3 text-xs text-neutral-500">{t("usage.platformDetail")}</p></div>}</>}
   </SectionCard>; }

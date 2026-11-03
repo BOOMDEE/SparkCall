@@ -89,9 +89,15 @@
   },
   "notifications": {
     "title": "Notifications",
-    "detail": "Review notification preferences for your SparkCall workspace.",
-    "emptyTitle": "No notification preferences available",
-    "emptyDetail": "SparkCall does not currently expose notification controls for this account."
+    "detail": "These controls apply only to this browser. Keep SparkCall open and connected to receive missed-call notifications; closed-tab push is not available.",
+    "doNotDisturb": "Silence incoming calls on this browser",
+    "doNotDisturbDetail": "Incoming call pop-ups are hidden, not declined. Calls remain in your missed-call history. Other devices and configured webhooks are unaffected.",
+    "missedCalls": "Notify me about missed calls",
+    "missedCallsDetail": "Show a generic browser notification for new missed incoming calls. Caller names and numbers are not shown.",
+    "missedTitle": "Missed call",
+    "missedBody": "You have a missed incoming call.",
+    "permissionDenied": "Browser notification permission was not granted. Allow notifications for this site in your browser settings, then try again.",
+    "unsupported": "This browser does not support native notifications."
   },
   "appearance": {
     "title": "Appearance",

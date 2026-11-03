@@ -2,7 +2,7 @@
 
 ## 请求与媒体路径
 
-浏览器通过同源 REST API 登录、管理账户和提交呼叫请求；Worker 校验会话、号码、黑名单及通话参与者后才访问 Durable Objects。信令 WebSocket 承载 SDP、ICE candidate 和通话状态，Durable Objects 使用 hibernation 与持久化邀请以支持在线状态和短时重连。WebRTC 媒体直接走 peer-to-peer；网络受限时使用 Cloudflare Realtime TURN。音频不会经过 Durable Objects，也不会由应用录制。
+浏览器通过同源 REST API 登录、管理账户和提交呼叫请求；Worker 校验会话、号码、黑名单及通话参与者后才访问 Durable Objects。信令 WebSocket 承载 SDP、ICE candidate 和通话状态，Durable Objects 使用 hibernation 与持久化邀请以支持在线状态和短时重连。Presence 邀请到期时以带状态条件的 D1 更新记录未接超时；已接听或已结束的呼叫不会被此更新覆盖。WebRTC 媒体直接走 peer-to-peer；网络受限时使用 Cloudflare Realtime TURN。音频不会经过 Durable Objects，也不会由应用录制。
 
 ```mermaid
 sequenceDiagram
@@ -39,6 +39,8 @@ sequenceDiagram
 
 用户偏好 PATCH 在单个浏览器会话内通过队列串行发送；D1 使用原子 JSON 合并并递增 `version`，每次写入返回该次提交后的偏好快照和版本。这样可以避免同一会话的响应乱序覆盖，并减少多个会话并发更新不同字段时的丢失更新。
 
+浏览器级免打扰和未接来电通知开关单独保存在按用户 ID 区分的版本化 `localStorage` 项中，不同步到 D1 或其他设备。免打扰只隐藏当前浏览器的来电弹窗，不代替服务端授权或自动拒接。启用通知后，打开的应用页面每 30 秒查询一次受认证的未接历史；浏览器原生通知仅在用户授权后尝试发送，并使用不含来电号码、姓名或通话 ID 的通用文案。没有 Service Worker/Push 订阅，因此关闭页面、浏览器休眠或断网时无法保证送达。
+
 公共通话记录默认私有。公开由所有者显式开启，可撤销、设定过期时间并更改 slug。公开内容不包含邮箱、内部 ID、会话或凭据；参与者姓名仅在参与者明确授权后展示。公开记录页面设置 `noindex, nofollow`。临时用户通过记录专用的 HttpOnly capability cookie 保留后续管理/撤销能力；该能力不使用可预测记录 ID。
 
 第三份迁移将记录所有者外键改为 `ON DELETE SET NULL`，并保留通话元数据快照，因此临时身份被清理后，独立 capability 仍可管理相应记录。此 Cookie 并不是跨设备恢复账号：丢失后可能无法恢复管理。自由备注与元数据值不具备自动个人信息脱敏能力，公开前必须审阅自行填写的内容。
@@ -53,4 +55,4 @@ Worker 使用 Cloudflare Realtime 官方 GraphQL Analytics 查询 `egressBytes`�
 - D1 原子计数是强制登录限流；KV 绑定未启用，因为当前没有非关键缓存需要它。
 - R2 用于头像或用户上传是可选能力，当前未启用。
 - 自动化检查包含类型检查、lint、前端与后端单元测试、生产构建及隔离的本地 Worker/D1 HTTP 集成测试；详见 [testing.md](testing.md)。真实浏览器跨 NAT 音频、并发/多设备行为、不同浏览器扬声器切换及远端 Durable Object 生命周期仍需另外验收。
-- 支付和 3DS 不属于本项目范围。生产部署目前暂停，不能把本地通过表述为已上线。
+- 支付和 3DS 不属于本项目范围。仓库有预发布公开预览，但不承诺生产 SLA 或跨网络音频验收；任何部署仍需授权维护者手动触发。

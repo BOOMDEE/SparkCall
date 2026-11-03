@@ -89,9 +89,15 @@
   },
   "notifications": {
     "title": "通知",
-    "detail": "查看 SparkCall 工作区的通知偏好。",
-    "emptyTitle": "暂无可用的通知偏好",
-    "emptyDetail": "SparkCall 当前没有为此账号提供通知控制项。"
+    "detail": "这些选项仅作用于此浏览器。要接收未接来电通知，请保持 SparkCall 页面打开并连接；关闭页面后不支持推送。",
+    "doNotDisturb": "此浏览器免打扰",
+    "doNotDisturbDetail": "来电弹窗会被隐藏，但不会自动拒接；通话仍会记入未接记录。其他设备和已配置的 Webhook 不受影响。",
+    "missedCalls": "未接来电时通知我",
+    "missedCallsDetail": "有新的未接来电时显示通用浏览器通知，不显示来电姓名或号码。",
+    "missedTitle": "未接来电",
+    "missedBody": "你有一个未接来电。",
+    "permissionDenied": "尚未获得浏览器通知权限。请在浏览器的网站设置中允许此网站发送通知，然后重试。",
+    "unsupported": "此浏览器不支持原生通知。"
   },
   "appearance": {
     "title": "外观",

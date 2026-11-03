@@ -7,7 +7,7 @@
 - 自定义域名：由 `SPARKCALL_HOSTNAME` 提供，必须属于当前 Cloudflare 账号中的活动 Zone
 - Wrangler 配置：仓库根目录 `wrangler.jsonc`，其中 D1 UUID 和域名是安全占位值
 
-当前仅完成代码与本地验证工作；生产部署保持暂停。以下步骤是未来经维护者决定发布时使用的操作指南，不表示已上线。
+仓库已有预发布公开预览，且没有生产 SLA 或真实跨网络音频验收承诺。以下步骤描述后续手动部署流程；自动部署保持关闭，每次发布仍需项目所有者明确批准。
 
 ## 一次性准备
 
@@ -58,7 +58,7 @@ npx wrangler deploy
 - `preview.yml`：对 PR 运行质量门禁并上传前端构建产物，供审阅下载；默认不公开部署未审阅代码。
 - `deploy.yml`：仅支持明确的手动 workflow dispatch，可选择 `api-token` 或 `device`；没有 push 触发器，也不会因设置仓库变量而自动部署。device 模式会在日志中显示 Cloudflare verification URL/code，操作人需打开链接并批准，工作流随后继续运行。
 
-**生产部署目前保持暂停。** 只有项目所有者明确批准后，授权操作员才应手动启动工作流。若使用 API token，保持最小权限并仅作为 GitHub Actions secret；部署工作流会先运行质量检查和 `npm run test:integration`，全部成功后才允许认证、应用远端 D1 migrations 并部署 Worker 与静态资源。
+**公开预览不等于生产验收。** 只有项目所有者明确批准后，授权操作员才应手动启动工作流。若使用 API token，保持最小权限并仅作为 GitHub Actions secret；部署工作流会先运行质量检查和 `npm run test:integration`，全部成功后才允许认证、应用远端 D1 migrations 并部署 Worker 与静态资源。
 
 在远端迁移或部署前，工作流会只读列出目标 Worker 上的 secret 名称，并确认 `INTERNAL_SIGNALING_TOKEN`、`TURN_KEY_ID`、`TURN_API_TOKEN` 和 `SPARKCALL_WEBHOOK_ENCRYPTION_KEY` 已配置。预检不会读取、打印或传输 secret 值；缺失任一名称即停止。该预检不替代对 Worker 运行行为的实际验证。
 
