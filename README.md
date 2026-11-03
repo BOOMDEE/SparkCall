@@ -4,13 +4,13 @@
 
 > **Version 0.1.0 · Early development / 早期开发**
 >
-> SparkCall is a browser-native audio-calling application built with React, WebRTC, Cloudflare Workers, D1, Durable Objects, and optional Cloudflare Realtime TURN relay. It is a runnable, early-stage codebase—not a confirmed live production service.
+> SparkCall is a browser-native audio-calling application built with React, WebRTC, Cloudflare Workers, D1, Durable Objects, and optional Cloudflare Realtime TURN relay. It is an early-stage, self-hostable codebase with a deployed public preview.
 >
-> SparkCall 是一个基于 React、WebRTC、Cloudflare Workers、D1、Durable Objects 和可选 Cloudflare Realtime TURN 中继的浏览器原生语音通话应用。它是可运行的早期代码库，但不是已确认在线的生产服务。
+> SparkCall 是一个基于 React、WebRTC、Cloudflare Workers、D1、Durable Objects 和可选 Cloudflare Realtime TURN 中继的浏览器原生语音通话应用。它是可自行部署的早期代码库，现已上线公开预览。
 >
-> **Release status / 发布状态:** Pre-release; production deployment is paused and has not been verified live. Local checks and CI do not prove production readiness, real cross-NAT audio, or a completed rollout.
+> **Release status / 发布状态:** Pre-release public preview: [call.boomdee.dpdns.org](https://call.boomdee.dpdns.org). The deployed Worker passed 19 rollout smoke checks covering HTTPS/assets, authentication, short-lived TURN credential issuance, D1 preferences, Presence/Signaling WebSockets, and server-side call cancellation. Real two-device audio and cross-NAT media connectivity have not yet been accepted.
 >
-> **当前状态:** 预发布；生产部署已暂停，尚未验证在线。通过本地检查或 CI 不代表生产可用、真实跨 NAT 音频可用或发布已完成。
+> **当前状态:** 预发布公开预览：[call.boomdee.dpdns.org](https://call.boomdee.dpdns.org)。已部署 Worker 通过 19 项上线冒烟检查，覆盖 HTTPS/静态资源、认证、短期 TURN 凭据签发、D1 偏好、Presence/Signaling WebSocket 和服务端通话取消。尚未完成双设备真实音频及跨 NAT 媒体连通验收。
 
 ## Contents / 目录
 
@@ -39,9 +39,9 @@ SparkCall explores a privacy-conscious, self-hostable calling workflow: create a
 
 SparkCall 探索一种注重隐私、可自行部署的通话流程：创建账号或临时身份、获得 SparkCall 号码、管理联系人和黑名单、发起浏览器语音通话，并可选择公开特定通话记录。Worker 负责 API 和 WebSocket 入口授权；Durable Objects 协调信令与在线状态；WebRTC 在浏览器之间直传音频，无法直连时再使用 TURN。应用不会录制音频。
 
-This repository is an early preproduction release. There is no claim of a live public service, production SLA, certification, guaranteed call quality, billing enforcement, or complete browser/device coverage. R2 uploads, payments/3DS, recording, and automatic TURN quota blocking are not implemented or enabled.
+This repository is an early pre-release with a live public preview. There is no production SLA, certification, guaranteed call quality, billing enforcement, or complete browser/device coverage. R2 uploads, payments/3DS, recording, and automatic TURN quota blocking are not implemented or enabled.
 
-本仓库是早期预生产版本。不宣称已有公开在线服务、生产 SLA、安全认证、保证通话质量、账单强制执行或完整浏览器/设备覆盖。R2 上传、支付/3DS、录音和自动 TURN 配额阻断尚未实现或启用。
+本仓库是早期预发布版本，已提供在线公开预览，但不承诺生产 SLA、安全认证、通话质量、账单强制执行或完整浏览器/设备覆盖。R2 上传、支付/3DS、录音和自动 TURN 配额阻断尚未实现或启用。
 
 ## Implemented features / 已实现功能
 
@@ -339,9 +339,9 @@ See [testing.md](docs/testing.md) for coverage, isolation, release preflight, an
 
 The manual deployment workflow expects the non-secret repository variables `D1_DATABASE_ID` and `SPARKCALL_HOSTNAME`; it injects them into the safe placeholders only in the temporary runner. / 手动部署工作流需要非敏感 repository variables `D1_DATABASE_ID` 和 `SPARKCALL_HOSTNAME`，只会在临时 runner 中注入安全占位值。
 
-Production deployment is currently paused, pre-release, and not confirmed live. An authorized maintainer may resume it only after reviewing the target configuration and completing the quality/integration gates. The intended manual order is:
+The public preview has been deployed once through authorized Wrangler OAuth after passing the quality/integration and Worker-secret gates. Automatic production deployment remains disabled. Future releases still require an authorized maintainer to review the target configuration and complete the gates. The manual order is:
 
-生产部署当前暂停，项目处于预发布状态，尚未确认在线。只有授权维护者审查目标配置并通过质量/集成门禁后，才可恢复部署。预期手动顺序为：
+公开预览已在通过质量/集成和 Worker secret 门禁后，通过获授权的 Wrangler OAuth 完成一次部署。生产自动部署仍然关闭。后续发布仍需授权维护者审查目标配置并通过门禁。手动顺序为：
 
 ```bash
 npx wrangler d1 migrations apply sparkcall-db --remote
@@ -369,7 +369,7 @@ See [deployment.md](docs/deployment.md) for the maintained procedure. It is an o
 - Cross-device, cross-browser, mobile-network, NAT, reconnect, accessibility, and speaker-routing acceptance remains manual work. / 跨设备、跨浏览器、移动网络、NAT、重连、无障碍和扬声器路由验收仍需人工完成。
 - Workers Web Crypto does not provide native Argon2id here; password hashing uses PBKDF2-SHA-256. / 当前 Workers Web Crypto 不提供原生 Argon2id，密码哈希使用 PBKDF2-SHA-256。
 - TURN analytics is sampled/time-windowed and `authoritative: false`; it is not a live bill. / TURN 分析经过采样和时间窗口统计，并标记 `authoritative: false`，不是实时账单。
-- R2 avatars/uploads, payments/3DS, audio recording, public production service, and automatic quota blocking are not enabled. / R2 头像/上传、支付/3DS、录音、公开生产服务和自动配额阻断尚未启用。
+- R2 avatars/uploads, payments/3DS, audio recording, and automatic quota blocking are not enabled. The hosted service is a pre-release public preview, not an SLA-backed production service. / R2 头像/上传、支付/3DS、录音和自动配额阻断尚未启用；托管站点是预发布公开预览，而非具有 SLA 保障的生产服务。
 - Webhook DNS checks have a documented DNS-to-connect TOCTOU limitation and are best-effort. / Webhook DNS 检查存在已说明的解析到连接 TOCTOU 限制，且仅尽力发送。
 
 ## Contributing / 贡献
