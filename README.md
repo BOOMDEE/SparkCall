@@ -340,9 +340,9 @@ See [testing.md](docs/testing.md) for coverage, isolation, release preflight, an
 
 The manual deployment workflow expects the non-secret repository variables `D1_DATABASE_ID` and `SPARKCALL_HOSTNAME`; it injects them into the safe placeholders only in the temporary runner. / 手动部署工作流需要非敏感 repository variables `D1_DATABASE_ID` 和 `SPARKCALL_HOSTNAME`，只会在临时 runner 中注入安全占位值。
 
-The public preview has been deployed once through authorized Wrangler OAuth after passing the quality/integration and Worker-secret gates. Automatic production deployment remains disabled. Future releases still require an authorized maintainer to review the target configuration and complete the gates. The manual order is:
+The public preview is deployed manually through authorized Wrangler OAuth after passing the quality/integration and Worker-secret gates. Automatic production deployment remains disabled. Future releases still require an authorized maintainer to review the target configuration and complete the gates. The manual order is:
 
-公开预览已在通过质量/集成和 Worker secret 门禁后，通过获授权的 Wrangler OAuth 完成一次部署。生产自动部署仍然关闭。后续发布仍需授权维护者审查目标配置并通过门禁。手动顺序为：
+公开预览在通过质量/集成和 Worker secret 门禁后，通过获授权的 Wrangler OAuth 手动部署。生产自动部署仍然关闭。后续发布仍需授权维护者审查目标配置并通过门禁。手动顺序为：
 
 ```bash
 npx wrangler d1 migrations apply sparkcall-db --remote
