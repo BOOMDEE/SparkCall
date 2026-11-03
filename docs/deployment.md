@@ -19,10 +19,16 @@
    - `SPARKCALL_WEBHOOK_ENCRYPTION_KEY`：用于加密 incoming-call webhook URL 的 32-byte 随机密钥，以 Base64 文本保存（可用 `openssl rand -base64 32` 生成）。
    - `TURN_ANALYTICS_API_TOKEN`：管理员 Cloudflare 用量与 TURN 限额检查所需的 Cloudflare API token；只使用已有且仅授予 **Account Analytics Read** 的 token，不要扩大权限。
 3. 设置非敏感 Worker variables：`CLOUDFLARE_ACCOUNT_ID`、`ADMIN_USER_IDS`、`TURN_MONTHLY_QUOTA_BYTES`，以及可选的 `SESSION_TTL_SECONDS` 和 `TEMP_SESSION_TTL_SECONDS`。`ADMIN_USER_IDS` 是逗号分隔的 SparkCall 内部 user ID；未配置或未匹配时，所有管理员接口 fail-closed。
-4. 在 GitHub Actions repository variables 中设置非敏感的 `D1_DATABASE_ID`、`SPARKCALL_HOSTNAME` 与 `ADMIN_USER_IDS`。手动部署工作流会在临时 runner 中替换安全占位值；这些值不应写进 Git。
+4. 在 GitHub Actions repository variables 中设置非敏感的 `D1_DATABASE_ID`、`SPARKCALL_HOSTNAME` 与 `ADMIN_USER_IDS`。正常发布要求 `ADMIN_USER_IDS`；仅一次性注册 bootstrap 可暂时留空。手动部署工作流会在临时 runner 中替换安全占位值；这些值不应写进 Git。
 5. `deploy.yml` 从 `CLOUDFLARE_ACCOUNT_ID` Actions secret 及 `ADMIN_USER_IDS` repository variable 注入非秘密 Worker variables；同一 account ID 也用于部署定位。仅当项目所有者批准并手动 dispatch `api-token` 模式时，才配置最小权限 `CLOUDFLARE_API_TOKEN` Actions secret；不要把 token 写入 YAML。
 
-TURN Analytics token 与 TURN key 是不同凭据。未配置 Analytics token 时，通话服务仍可签发 TURN credentials，但管理员平台用量不可用，启用的 TURN 限额在没有可用采样时会 fail-open，仍允许新凭据并可能超额。手动部署预检会要求该 Worker Secret 已存在。
+TURN Analytics token 与 TURN key 是不同凭据。未配置 Analytics token 时，通话服务仍可签发 TURN credentials，但 Cloudflare 账号级用量不可用；若配置了 TURN 执行限额，缺少可用采样时会 fail-open，仍允许新凭据并可能超额。正常发布预检要求该 Worker Secret 已存在；下面记录的一次性注册 bootstrap 是唯一例外。
+
+## 一次性注册 bootstrap
+
+`deploy.yml` 的 `bootstrap_registration` 默认关闭。只有为修复注册而进行的一次手动发布才可打开，并且必须同时选择 `auth_method=device`；工作流会拒绝 API-token 模式，也要求 repository variable `ADMIN_USER_IDS` 为空。它仅跳过 `TURN_ANALYTICS_API_TOKEN` 名称预检，其余必需 Worker secrets、测试、D1 migrations 和人工 Cloudflare device authorization 仍照常执行。它不会创建或扩大任何 Cloudflare API token 权限。
+
+部署时 Worker 的管理员 allowlist 为空，因此所有管理员 API 继续 fail-closed；Cloudflare 账号级用量不可用，且任何已启用的 TURN 执行限额在采样不可用时 fail-open。公开账号级用量仍默认关闭。注册成功后，先把新账号的内部 user ID 写入 `ADMIN_USER_IDS`，再通过安全方式配置一个已有且仅有 **Account Analytics Read** 权限的 `TURN_ANALYTICS_API_TOKEN`；随后执行正常发布。bootstrap 完成后应移除该临时发布例外，不能把它当作常规部署模式。
 
 ## 首次部署 bootstrap
 
@@ -56,11 +62,11 @@ npx wrangler deploy
 
 - `test.yml`：push、PR 和手动运行质量门禁，以及隔离本地 D1/HTTP/WebSocket 集成测试。
 - `preview.yml`：对 PR 运行质量门禁并上传前端构建产物，供审阅下载；默认不公开部署未审阅代码。
-- `deploy.yml`：仅支持明确的手动 workflow dispatch，可选择 `api-token` 或 `device`；没有 push 触发器，也不会因设置仓库变量而自动部署。device 模式会在日志中显示 Cloudflare verification URL/code，操作人需打开链接并批准，工作流随后继续运行。
+- `deploy.yml`：仅支持明确的手动 workflow dispatch，可选择 `api-token` 或 `device`；没有 push 触发器，也不会因设置仓库变量而自动部署。`bootstrap_registration` 默认关闭，只有一次性注册修复可打开，且强制 device 模式。device 模式会在日志中显示 Cloudflare verification URL/code，操作人需打开链接并批准，工作流随后继续运行。
 
 **公开预览不等于生产验收。** 只有项目所有者明确批准后，授权操作员才应手动启动工作流。若使用 API token，保持最小权限并仅作为 GitHub Actions secret；部署工作流会先运行质量检查和 `npm run test:integration`，全部成功后才允许认证、应用远端 D1 migrations 并部署 Worker 与静态资源。
 
-在远端迁移或部署前，工作流会只读列出目标 Worker 上的 secret 名称，并确认 `INTERNAL_SIGNALING_TOKEN`、`TURN_KEY_ID`、`TURN_API_TOKEN`、`SPARKCALL_WEBHOOK_ENCRYPTION_KEY` 和 `TURN_ANALYTICS_API_TOKEN` 已配置。预检不会读取、打印或传输 secret 值；缺失任一名称即停止。该预检不替代对 Worker 运行行为的实际验证。
+在远端迁移或部署前，工作流会只读列出目标 Worker 上的 secret 名称，并确认 `INTERNAL_SIGNALING_TOKEN`、`TURN_KEY_ID`、`TURN_API_TOKEN` 和 `SPARKCALL_WEBHOOK_ENCRYPTION_KEY` 已配置；正常发布还要求 `TURN_ANALYTICS_API_TOKEN`。仅当一次性注册 bootstrap 被显式选中时，才允许暂缺 Analytics secret。预检不会读取、打印或传输 secret 值；缺失其他必需名称即停止。该预检不替代对 Worker 运行行为的实际验证。
 
 所有第三方 Actions 都固定到已核对的官方完整提交 SHA，而非可变的 `@v4` 标签：[checkout](https://github.com/actions/checkout/commit/11d5960a326750d5838078e36cf38b85af677262)、[setup-node](https://github.com/actions/setup-node/commit/49933ea5288caeca8642d1e84afbd3f7d6820020)、[upload-artifact](https://github.com/actions/upload-artifact/commit/ea165f8d65b6e75b540449e92b4886f43607fa02)。升级时应核对官方来源并审阅差异后更新 SHA。
 

@@ -11,6 +11,11 @@ on:
           - device
         default: api-token
         required: true
+      bootstrap_registration:
+        description: One-time registration bootstrap; requires device authorization and disables admin access until configured
+        type: boolean
+        default: false
+        required: false
 
 permissions:
   contents: read
@@ -26,6 +31,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      AUTH_METHOD: ${{ inputs.auth_method }}
+      BOOTSTRAP_REGISTRATION: ${{ inputs.bootstrap_registration }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -60,7 +67,16 @@ jobs:
             console.error("Set the SPARKCALL_HOSTNAME repository variable to a hostname in your Cloudflare zone.");
             process.exit(1);
           }
-          if (!/^[A-Za-z0-9_-]{1,80}(?:,[A-Za-z0-9_-]{1,80})*$/.test(adminUserIds)) {
+          const bootstrapRegistration = process.env.BOOTSTRAP_REGISTRATION === "true";
+          if (bootstrapRegistration && process.env.AUTH_METHOD !== "device") {
+            console.error("Registration bootstrap requires Cloudflare device authorization.");
+            process.exit(1);
+          }
+          if (bootstrapRegistration && adminUserIds !== "") {
+            console.error("Registration bootstrap requires an empty ADMIN_USER_IDS variable so all admin APIs remain fail-closed.");
+            process.exit(1);
+          }
+          if (!bootstrapRegistration && !/^[A-Za-z0-9_-]{1,80}(?:,[A-Za-z0-9_-]{1,80})*$/.test(adminUserIds)) {
             console.error("Set the ADMIN_USER_IDS repository variable to one or more comma-separated SparkCall user IDs.");
             process.exit(1);
           }
@@ -95,7 +111,8 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           npx wrangler secret list --name sparkcall --format json | node -e '
-            const required = ["INTERNAL_SIGNALING_TOKEN", "TURN_KEY_ID", "TURN_API_TOKEN", "SPARKCALL_WEBHOOK_ENCRYPTION_KEY", "TURN_ANALYTICS_API_TOKEN"];
+            const required = ["INTERNAL_SIGNALING_TOKEN", "TURN_KEY_ID", "TURN_API_TOKEN", "SPARKCALL_WEBHOOK_ENCRYPTION_KEY"];
+            if (process.env.BOOTSTRAP_REGISTRATION !== "true") required.push("TURN_ANALYTICS_API_TOKEN");
             let input = "";
             process.stdin.on("data", chunk => input += chunk);
             process.stdin.on("end", () => {
@@ -114,7 +131,8 @@ jobs:
         if: ${{ inputs.auth_method == 'device' }}
         run: |
           npx wrangler secret list --name sparkcall --format json | node -e '
-            const required = ["INTERNAL_SIGNALING_TOKEN", "TURN_KEY_ID", "TURN_API_TOKEN", "SPARKCALL_WEBHOOK_ENCRYPTION_KEY", "TURN_ANALYTICS_API_TOKEN"];
+            const required = ["INTERNAL_SIGNALING_TOKEN", "TURN_KEY_ID", "TURN_API_TOKEN", "SPARKCALL_WEBHOOK_ENCRYPTION_KEY"];
+            if (process.env.BOOTSTRAP_REGISTRATION !== "true") required.push("TURN_ANALYTICS_API_TOKEN");
             let input = "";
             process.stdin.on("data", chunk => input += chunk);
             process.stdin.on("end", () => {
