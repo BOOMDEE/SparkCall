@@ -193,6 +193,20 @@ def run():
             data, _ = anonymous.request("GET", "/api/session")
             assert data["authenticated"] is False
             anonymous.request("GET", "/api/me", status=401)
+            registered = Client(origin)
+            registered_username = f"registration-{secrets.token_hex(4)}"
+            registered_data, registered_headers = registered.request(
+                "POST",
+                "/api/auth/register",
+                {"username": registered_username, "password": PASSWORD, "displayName": "Integration Account"},
+                status=201,
+            )
+            assert registered_data["user"]["username"] == registered_username
+            assert registered_data["user"]["temporary"] is False
+            assert "HttpOnly" in registered_headers.get("Set-Cookie", "")
+            registered_login = Client(origin)
+            login_data, _ = registered_login.request("POST", "/api/auth/login", {"username": registered_username, "password": PASSWORD})
+            assert login_data["user"]["id"] == registered_data["user"]["id"]
             anonymous.request("POST", "/api/auth/guest", {}, status=403, origin="https://attacker.invalid")
             anonymous.request("POST", "/api/auth/guest", {}, status=403, omit_origin=True)
             anonymous.request("POST", "/api/calls", {"number": "Nobody"}, status=403, origin="https://attacker.invalid")

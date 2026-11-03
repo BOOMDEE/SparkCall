@@ -1,7 +1,8 @@
 import type { Env } from "./env";
 import { base64url, bytes, error, hex, id, now } from "./database";
 
-const PBKDF2_ITERATIONS = 310_000;
+/** Cloudflare Workers Web Crypto rejects PBKDF2 counts above 100,000. */
+const PBKDF2_ITERATIONS = 100_000;
 const SESSION_COOKIE = "sc_session";
 const SESSION_MAX = 60 * 60 * 24 * 30;
 
@@ -59,7 +60,7 @@ export async function verifyPassword(password: string, stored: string) {
   const parts = stored.split("$");
   if (parts.length !== 5 || parts[0] !== "pbkdf2-sha256" || parts[1] !== "v1") return false;
   const iterations = Number(parts[2]);
-  if (!Number.isSafeInteger(iterations) || iterations < 100_000 || iterations > 1_000_000) return false;
+  if (!Number.isSafeInteger(iterations) || iterations < 100_000 || iterations > PBKDF2_ITERATIONS) return false;
   try {
     const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveBits"]);
     const bits = new Uint8Array(await crypto.subtle.deriveBits({ name: "PBKDF2", salt: fromB64(parts[3]!), iterations, hash: "SHA-256" }, key, 256));

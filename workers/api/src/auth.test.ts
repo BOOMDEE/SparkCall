@@ -35,7 +35,7 @@ describe("password and token primitives", () => {
   it("hashes passwords with a versioned, salted PBKDF2 record", async () => {
     const first = await hashPassword("correct horse battery staple");
     const second = await hashPassword("correct horse battery staple");
-    expect(first).toMatch(/^pbkdf2-sha256\$v1\$310000\$[^$]+\$[^$]+$/);
+    expect(first).toMatch(/^pbkdf2-sha256\$v1\$100000\$[^$]+\$[^$]+$/);
     expect(second).not.toBe(first);
     await expect(verifyPassword("correct horse battery staple", first)).resolves.toBe(true);
     await expect(verifyPassword("wrong password", first)).resolves.toBe(false);
@@ -43,7 +43,14 @@ describe("password and token primitives", () => {
   });
 
   it("rejects malformed or unsafe password records without throwing", async () => {
-    for (const value of ["", "pbkdf2-sha256$v1$not-a-number$salt$digest", "pbkdf2-sha256$v1$99999$AA$AA", "pbkdf2-sha256$v1$100000$%%%$%%%"]) {
+    for (const value of [
+      "",
+      "pbkdf2-sha256$v1$not-a-number$salt$digest",
+      "pbkdf2-sha256$v1$99999$AA$AA",
+      "pbkdf2-sha256$v1$100001$AA$AA",
+      "pbkdf2-sha256$v1$310000$AA$AA",
+      "pbkdf2-sha256$v1$100000$%%%$%%%",
+    ]) {
       await expect(verifyPassword("password", value)).resolves.toBe(false);
     }
   });

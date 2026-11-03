@@ -51,7 +51,7 @@ Worker 使用 Cloudflare Realtime 官方 GraphQL Analytics 查询 `egressBytes`�
 
 ## 计划取舍与限制
 
-- Workers Web Crypto 不提供原生 Argon2id 派生函数；本实现使用 310,000 轮 PBKDF2-SHA-256，并保存版本标记，便于以后更换哈希方案。
+- Workers Web Crypto 不提供原生 Argon2id 派生函数，且拒绝超过 100,000 轮的 PBKDF2；本实现使用运行时支持的 100,000 轮 PBKDF2-SHA-256，并保存版本标记，便于以后更换哈希方案。
 - D1 原子计数是强制登录限流；KV 绑定未启用，因为当前没有非关键缓存需要它。
 - R2 用于头像或用户上传是可选能力，当前未启用。
 - 自动化检查包含类型检查、lint、前端与后端单元测试、生产构建及隔离的本地 Worker/D1 HTTP 集成测试；详见 [testing.md](testing.md)。真实浏览器跨 NAT 音频、并发/多设备行为、不同浏览器扬声器切换及远端 Durable Object 生命周期仍需另外验收。
