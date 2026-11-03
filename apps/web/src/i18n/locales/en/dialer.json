@@ -69,6 +69,10 @@
     "network": "Device network",
     "state": "Call state",
     "connection": "WebRTC connection",
+    "preferredMode": "Preferred mode for the next call",
+    "modePreferenceDetail": "Changes apply to the next call and never restart an active call. Auto tries direct P2P first; TURN-only uses a relay. Direct P2P media is not counted as TURN usage.",
+    "currentMode": "Current media path",
+    "relayUnavailable": "The sampled monthly TURN relay limit has been reached. This call is trying direct P2P; analytics can lag, so the displayed limit is not real-time and usage may exceed it.",
     "duration": "Duration",
     "online": "Connected",
     "offline": "Reconnecting",
@@ -90,6 +94,14 @@
       "failed": "Failed",
       "closed": "Closed"
     },
+    "connectionModes": {
+      "unknown": "Negotiating / unknown",
+      "p2p": "P2P direct",
+      "turn": "TURN relay",
+      "auto": "Auto · P2P first, TURN fallback",
+      "preferredP2p": "P2P only",
+      "preferredTurn": "TURN only"
+    },
     "webrtcNote": "Calls use WebRTC. Cloudflare TURN credentials are fetched server-side and are never exposed as long-lived account credentials.",
     "failureHint": "When the network drops, the caller makes up to two automatic recovery attempts. If recovery fails, check your network and this deployment’s TURN configuration before calling again."
   },
@@ -101,6 +113,7 @@
     "audioDevicesFailed": "Could not access audio devices. {{detail}}",
     "microphoneFailed": "Could not change microphone. {{detail}}",
     "speakerFailed": "Speaker selection is not available in this browser. {{detail}}",
+    "modeSave": "Could not save the preferred call mode. {{detail}}",
     "session": "Call service error. {{detail}}"
   }
 }

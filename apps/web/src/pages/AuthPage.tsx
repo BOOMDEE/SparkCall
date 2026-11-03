@@ -1,14 +1,17 @@
 import { useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, ArrowRight, Phone } from "lucide-react";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { api, type Me } from "../lib/api";
 import { LanguageSwitcher } from "../components/LanguageSwitcher";
+import { BrandLink } from "../components/BrandLink";
 import { SiteFooter } from "../components/SiteFooter";
 import { Button, Field, Notice } from "../components/ui";
+import { useSiteConfiguration } from "../contexts/SiteConfiguration";
 
 export default function AuthPage({ mode }: { mode: "login" | "register" }) {
   const { t } = useTranslation("auth");
+  const siteConfiguration = useSiteConfiguration();
   const location = useLocation();
   const navigate = useNavigate();
   const params = new URLSearchParams(location.search);
@@ -45,12 +48,7 @@ export default function AuthPage({ mode }: { mode: "login" | "register" }) {
     <main className="flex min-h-screen flex-col bg-white text-neutral-950 dark:bg-black dark:text-neutral-100">
       <header className="border-b border-neutral-200 dark:border-neutral-800">
         <div className="mx-auto flex h-14 w-full max-w-[1200px] items-center justify-between px-4 sm:px-6">
-          <Link to="/" aria-label={t("brand.homeLabel")} className="flex items-center gap-2 text-sm font-semibold tracking-tight">
-            <span aria-hidden="true" className="grid h-6 w-6 place-items-center rounded-md bg-neutral-900 text-white dark:bg-white dark:text-black">
-              <Phone size={13} fill="currentColor" strokeWidth={1.8} />
-            </span>
-            SparkCall
-          </Link>
+          <BrandLink to="/" className="flex items-center gap-2 text-sm font-semibold tracking-tight" markClassName="grid h-6 w-6 place-items-center rounded-md bg-neutral-900 text-white dark:bg-white dark:text-black" iconSize={13} filled />
           <LanguageSwitcher />
         </div>
       </header>
@@ -123,14 +121,14 @@ export default function AuthPage({ mode }: { mode: "login" | "register" }) {
             </section>
           </section>
 
-          <aside className="border-t border-neutral-200 pt-5 dark:border-neutral-800 lg:border-l lg:border-t-0 lg:pl-8" aria-labelledby="temporary-title">
+          {siteConfiguration.temporaryAccounts.enabled && <aside className="border-t border-neutral-200 pt-5 dark:border-neutral-800 lg:border-l lg:border-t-0 lg:pl-8" aria-labelledby="temporary-title">
             <h2 id="temporary-title" className="text-sm font-medium">{t("temporary.title")}</h2>
-            <p className="mt-2 text-sm leading-6 text-neutral-500 dark:text-neutral-400">{t("temporary.detail")}</p>
+            <p className="mt-2 text-sm leading-6 text-neutral-500 dark:text-neutral-400">{t("temporary.detail", { lifetimeHours: siteConfiguration.temporaryAccounts.lifetimeHours })}</p>
             <Link to="/" className="mt-5 inline-flex items-center gap-2 text-sm font-medium text-neutral-950 underline underline-offset-4 hover:no-underline dark:text-white" aria-label={t("temporary.action")}>
               {t("actions.tryTemporary")}
               <ArrowRight size={15} aria-hidden="true" />
             </Link>
-          </aside>
+          </aside>}
         </div>
       </div>
 

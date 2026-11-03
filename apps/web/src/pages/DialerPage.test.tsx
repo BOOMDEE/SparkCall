@@ -7,12 +7,12 @@ const apiMock = vi.hoisted(() => vi.fn());
 const startOutgoing = vi.hoisted(() => vi.fn());
 const cancel = vi.hoisted(() => vi.fn());
 const session = vi.hoisted(() => ({
-  snapshot: { id: null as string | null, state: "IDLE" as string, role: null as "caller" | "callee" | null, durationMs: 0, muted: false, connectionState: "new", networkOnline: true, recoveryStatus: "idle" as "idle" | "reconnecting" | "recovered" | "failed" },
+  snapshot: { id: null as string | null, state: "IDLE" as string, role: null as "caller" | "callee" | null, durationMs: 0, muted: false, connectionState: "new", connectionMode: "unknown" as "unknown" | "p2p" | "turn", relayUnavailable: false, networkOnline: true, recoveryStatus: "idle" as "idle" | "reconnecting" | "recovered" | "failed" },
   controller: { startOutgoing, cancel, hangup: vi.fn(), toggleMute: vi.fn(), setAudioOutput: vi.fn() },
   preferencesReady: true,
   preferenceLoadError: false,
   retryPreferences: vi.fn(),
-  preferences: { audioInputDeviceId: "", audioOutputDeviceId: "" },
+  preferences: { audioInputDeviceId: "", audioOutputDeviceId: "", connectionMode: "auto" },
   peer: null,
   online: true,
   error: null,
@@ -49,7 +49,7 @@ import DialerPage from "./DialerPage";
 
 afterEach(() => {
   document.body.innerHTML = "";
-  session.snapshot = { id: null, state: "IDLE", role: null, durationMs: 0, muted: false, connectionState: "new", networkOnline: true, recoveryStatus: "idle" };
+  session.snapshot = { id: null, state: "IDLE", role: null, durationMs: 0, muted: false, connectionState: "new", connectionMode: "unknown", relayUnavailable: false, networkOnline: true, recoveryStatus: "idle" };
   vi.clearAllMocks();
 });
 

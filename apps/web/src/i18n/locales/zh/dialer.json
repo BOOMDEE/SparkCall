@@ -69,6 +69,10 @@
     "network": "设备网络",
     "state": "通话状态",
     "connection": "WebRTC 连接",
+    "preferredMode": "下一通的连接偏好",
+    "modePreferenceDetail": "更改仅在下一通生效，不会重建正在进行的通话。自动模式先尝试 P2P 直连，再回退 TURN；TURN-only 仅使用中继。P2P 直连媒体流量不计入 TURN 用量。",
+    "currentMode": "当前媒体路径",
+    "relayUnavailable": "采样用量已达到月度 TURN 中继上限。本通正在尝试 P2P 直连；分析数据可能延迟，因此这不是实时硬限制，实际用量可能超过显示额度。",
     "duration": "时长",
     "online": "已连接",
     "offline": "正在重连",
@@ -90,6 +94,14 @@
       "failed": "失败",
       "closed": "已关闭"
     },
+    "connectionModes": {
+      "unknown": "协商中 / 未知",
+      "p2p": "P2P 直连",
+      "turn": "TURN 中继",
+      "auto": "自动 · 优先 P2P，必要时 TURN",
+      "preferredP2p": "仅 P2P 直连",
+      "preferredTurn": "仅 TURN 中继"
+    },
     "webrtcNote": "通话使用 WebRTC。Cloudflare TURN 凭据由服务器获取，不会暴露为长期账号凭据。",
     "failureHint": "网络波动时，主叫方最多会自动重试两次。若仍失败，请检查网络以及此部署的 TURN 配置后重拨。"
   },
@@ -101,6 +113,7 @@
     "audioDevicesFailed": "无法访问音频设备。{{detail}}",
     "microphoneFailed": "无法切换麦克风。{{detail}}",
     "speakerFailed": "此浏览器不支持选择扬声器。{{detail}}",
+    "modeSave": "无法保存连接模式偏好。{{detail}}",
     "session": "通话服务错误。{{detail}}"
   }
 }

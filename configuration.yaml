@@ -1,0 +1,21 @@
+# Public, non-secret SparkCall defaults. Production secrets belong in Cloudflare Worker Secrets.
+branding:
+  productName: "SparkCall"
+  logoUrl: ""
+  footerBadge: "Design with ❤️ by @BOOMDEE"
+  footerLicense: "SparkCall · Open source under Apache-2.0"
+usage:
+  showPublicAggregate: false
+  minimumAggregateUsers: 5
+  allowUserBitrateSettings: true
+  monthlyUserQuotaBytes: null
+  monthlyTurnLimitBytes: null
+temporaryAccounts:
+  enabled: true
+  lifetimeHours: 24
+  maxActiveAccounts: 0
+  perIpCreationLimit: 8
+  perIpWindowMinutes: 60
+  monthlyTurnQuotaBytes: null
+  monthlyTurnLimitBytes: null
+  monthlyAggregateBudgetBytes: null

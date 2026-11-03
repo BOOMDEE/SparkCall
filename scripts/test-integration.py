@@ -118,6 +118,25 @@ def test_websocket_sessions(origin, alice, bob, local_sql):
             socket.close()
 
 
+def test_public_usage_excludes_expired_users(anonymous, local_sql):
+    local_sql("INSERT INTO app_settings(key,value_json,updated_at) VALUES('site_configuration','{\"usage\":{\"showPublicAggregate\":true,\"minimumAggregateUsers\":5}}',strftime('%Y-%m-%dT%H:%M:%fZ','now')) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json,updated_at=excluded.updated_at")
+    for index in range(4):
+        user_id = f"public-active-{index}"
+        local_sql(f"INSERT INTO users(id,display_name,is_temporary,expires_at,created_at,updated_at) VALUES('{user_id}','Public active {index}',1,strftime('%Y-%m-%dT%H:%M:%fZ','now','+1 day'),strftime('%Y-%m-%dT%H:%M:%fZ','now'),strftime('%Y-%m-%dT%H:%M:%fZ','now'))")
+        local_sql(f"INSERT INTO usage_snapshots(id,user_id,month,bytes_used,quota_bytes,authoritative,captured_at) VALUES('snapshot-{index}','{user_id}',strftime('%Y-%m','now'),{index + 1},NULL,0,strftime('%Y-%m-%dT%H:%M:%fZ','now'))")
+    local_sql("INSERT INTO users(id,display_name,is_temporary,expires_at,created_at,updated_at) VALUES('public-expired-guest','Expired preview guest',1,strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 day'),strftime('%Y-%m-%dT%H:%M:%fZ','now','-2 day'),strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 day'))")
+    local_sql("INSERT INTO usage_snapshots(id,user_id,month,bytes_used,quota_bytes,authoritative,captured_at) VALUES('snapshot-expired','public-expired-guest',strftime('%Y-%m','now'),999999999,NULL,0,strftime('%Y-%m-%dT%H:%M:%fZ','now'))")
+
+    data, _ = anonymous.request("GET", "/api/usage/public")
+    assert data["available"] is False and data["usedBytes"] is None, "Expired accounts must not satisfy the public cohort threshold"
+
+    local_sql("INSERT INTO users(id,display_name,is_temporary,expires_at,created_at,updated_at) VALUES('public-active-4','Public active 4',1,strftime('%Y-%m-%dT%H:%M:%fZ','now','+1 day'),strftime('%Y-%m-%dT%H:%M:%fZ','now'),strftime('%Y-%m-%dT%H:%M:%fZ','now'))")
+    local_sql("INSERT INTO usage_snapshots(id,user_id,month,bytes_used,quota_bytes,authoritative,captured_at) VALUES('snapshot-4','public-active-4',strftime('%Y-%m','now'),5,NULL,0,strftime('%Y-%m-%dT%H:%M:%fZ','now'))")
+    data, _ = anonymous.request("GET", "/api/usage/public")
+    assert data["available"] is True and data["usedBytes"] == 15, "The public total must include only five active users and exclude expired usage"
+    print("PASS: public aggregate excludes expired users from both cohort and total.", flush=True)
+
+
 def run():
     assert WRANGLER.exists(), "Run npm ci first"
     assert (ROOT / "apps/web/dist/index.html").exists(), "Run npm run build first"
@@ -133,6 +152,7 @@ def run():
             "name": "sparkcall-integration",
             "main": str(ROOT / "workers/api/src/index.ts"),
             "compatibility_date": "2026-11-02",
+            "rules": [{"type": "Text", "globs": ["**/*.yaml"], "fallthrough": True}],
             "assets": {"directory": str(ROOT / "apps/web/dist"), "binding": "ASSETS", "not_found_handling": "single-page-application", "run_worker_first": ["/api/*", "/callrecords", "/callrecords/*"]},
             "d1_databases": [{"binding": "DB", "database_name": "sparkcall-integration", "database_id": "00000000-0000-0000-0000-000000000000", "migrations_dir": str(ROOT / "migrations")}],
             "durable_objects": {"bindings": [{"name": "SIGNALING", "class_name": "SparkCallDurableObject"}, {"name": "PRESENCE", "class_name": "SparkCallPresenceObject"}]},
@@ -265,6 +285,7 @@ def run():
             guest.request("DELETE", f"/api/records/{guest_record}")
             anonymous.request("GET", "/api/records/guest-owned", status=404)
             alice.request("GET", "/api/turn/credentials", status=503)
+            test_public_usage_excludes_expired_users(anonymous, local_sql)
             alice.request("POST", "/api/auth/logout", {})
             alice.request("GET", "/api/me", status=401)
             alice.request("POST", "/api/auth/login", {"username": "alice", "password": "incorrect"}, status=401)

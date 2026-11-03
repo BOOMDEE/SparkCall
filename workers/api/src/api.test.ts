@@ -37,10 +37,12 @@ function preferenceEnv() {
         };
         return Object.assign(statement, bound);
       }),
+      query,
     };
     return statement;
   });
-  return { DB: { prepare }, ALLOWED_ORIGIN: "https://example.test" } as any;
+  const batch = vi.fn(async (statements: Array<{ query: string }>) => statements.map(() => ({ success: true, meta: { changes: 1 } })));
+  return { DB: { prepare, batch }, ALLOWED_ORIGIN: "https://example.test" } as any;
 }
 
 async function jsonResponse(response: Response) {
@@ -94,5 +96,45 @@ describe("API preference and TURN regressions", () => {
     expect(oversized).toMatchObject({ status: 502, body: { error: { code: "TURN_INVALID_RESPONSE" } } });
     expect(fetchMock.mock.calls[0]?.[1]).not.toMatchObject({ body: expect.stringContaining("provider-secret") });
     vi.unstubAllGlobals();
+  });
+
+  it("keeps admin settings allowlisted and never projects the analytics token to the public API", async () => {
+    const tokenSentinel = "test-only-analytics-token-sentinel";
+    const env = { ...preferenceEnv(), TURN_ANALYTICS_API_TOKEN: tokenSentinel };
+    const denied = await jsonResponse(await handleApi(request("/api/admin/config"), env));
+    expect(denied.status).toBe(404);
+
+    const publicResponse = await jsonResponse(await handleApi(request("/api/config"), env));
+    expect(publicResponse.status).toBe(200);
+    expect(JSON.stringify(publicResponse.body)).not.toContain(tokenSentinel);
+    expect(publicResponse.body).not.toHaveProperty("platformUsage");
+
+    env.ADMIN_USER_IDS = user.id;
+    const allowed = await jsonResponse(await handleApi(request("/api/admin/config"), env));
+    expect(allowed.status).toBe(200);
+    expect(JSON.stringify(allowed.body)).not.toContain(tokenSentinel);
+  });
+
+  it("commits administrator configuration and its audit row in the same D1 batch", async () => {
+    const env = preferenceEnv();
+    env.ADMIN_USER_IDS = user.id;
+    const update = await jsonResponse(await handleApi(request("/api/admin/config", {
+      method: "PATCH",
+      body: JSON.stringify({ configuration: { branding: { productName: "Preview SparkCall" } } }),
+    }), env));
+    expect(update.status).toBe(200);
+    expect(env.DB.batch).toHaveBeenCalledTimes(1);
+    const updateStatements = env.DB.batch.mock.calls[0]?.[0] ?? [];
+    expect(updateStatements).toHaveLength(2);
+    expect(updateStatements[0]?.query).toContain("INSERT INTO app_settings");
+    expect(updateStatements[1]?.query).toContain("INSERT INTO admin_audit");
+
+    const reset = await jsonResponse(await handleApi(request("/api/admin/config", { method: "DELETE" }), env));
+    expect(reset.status).toBe(200);
+    expect(env.DB.batch).toHaveBeenCalledTimes(2);
+    const resetStatements = env.DB.batch.mock.calls[1]?.[0] ?? [];
+    expect(resetStatements).toHaveLength(2);
+    expect(resetStatements[0]?.query).toContain("DELETE FROM app_settings");
+    expect(resetStatements[1]?.query).toContain("INSERT INTO admin_audit");
   });
 });

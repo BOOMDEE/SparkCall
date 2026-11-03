@@ -17,12 +17,12 @@
    - `TURN_KEY_ID`：Cloudflare Realtime TURN key 的 UID。
    - `TURN_API_TOKEN`：TURN key 创建后返回的一次性 key；仅保存在 Worker secret 中。
    - `SPARKCALL_WEBHOOK_ENCRYPTION_KEY`：用于加密 incoming-call webhook URL 的 32-byte 随机密钥，以 Base64 文本保存（可用 `openssl rand -base64 32` 生成）。
-   - `TURN_ANALYTICS_API_TOKEN`：可选的 Account Analytics Read token，用于 GraphQL Realtime 用量统计。
-3. 设置非敏感 Worker variables：`CLOUDFLARE_ACCOUNT_ID`、`TURN_MONTHLY_QUOTA_BYTES`，可选 `ADMIN_USER_IDS`、`SESSION_TTL_SECONDS` 和 `TEMP_SESSION_TTL_SECONDS`。`ADMIN_USER_IDS` 是逗号分隔的 SparkCall 内部 user ID。
-4. 在 GitHub Actions repository variables 中设置非敏感的 `D1_DATABASE_ID` 与 `SPARKCALL_HOSTNAME`。手动部署工作流会在临时 runner 中替换安全占位值；这两个值不应写进 Git。
-5. 仅当项目所有者批准并手动 dispatch `api-token` 模式时，才将 `CLOUDFLARE_ACCOUNT_ID` 和最小权限 `CLOUDFLARE_API_TOKEN` 配置为仓库 Actions secrets；不要把 token 写入 YAML。
+   - `TURN_ANALYTICS_API_TOKEN`：管理员 Cloudflare 用量与 TURN 限额检查所需的 Cloudflare API token；只使用已有且仅授予 **Account Analytics Read** 的 token，不要扩大权限。
+3. 设置非敏感 Worker variables：`CLOUDFLARE_ACCOUNT_ID`、`ADMIN_USER_IDS`、`TURN_MONTHLY_QUOTA_BYTES`，以及可选的 `SESSION_TTL_SECONDS` 和 `TEMP_SESSION_TTL_SECONDS`。`ADMIN_USER_IDS` 是逗号分隔的 SparkCall 内部 user ID；未配置或未匹配时，所有管理员接口 fail-closed。
+4. 在 GitHub Actions repository variables 中设置非敏感的 `D1_DATABASE_ID`、`SPARKCALL_HOSTNAME` 与 `ADMIN_USER_IDS`。手动部署工作流会在临时 runner 中替换安全占位值；这些值不应写进 Git。
+5. `deploy.yml` 从 `CLOUDFLARE_ACCOUNT_ID` Actions secret 及 `ADMIN_USER_IDS` repository variable 注入非秘密 Worker variables；同一 account ID 也用于部署定位。仅当项目所有者批准并手动 dispatch `api-token` 模式时，才配置最小权限 `CLOUDFLARE_API_TOKEN` Actions secret；不要把 token 写入 YAML。
 
-TURN analytics token 与 TURN key 是不同凭据。未配置 analytics token 时，通话服务仍可签发 TURN credentials，但月度用量面板显示“未配置”。
+TURN Analytics token 与 TURN key 是不同凭据。未配置 Analytics token 时，通话服务仍可签发 TURN credentials，但管理员平台用量不可用，启用的 TURN 限额在没有可用采样时会 fail-open，仍允许新凭据并可能超额。手动部署预检会要求该 Worker Secret 已存在。
 
 ## 首次部署 bootstrap
 
@@ -60,7 +60,7 @@ npx wrangler deploy
 
 **公开预览不等于生产验收。** 只有项目所有者明确批准后，授权操作员才应手动启动工作流。若使用 API token，保持最小权限并仅作为 GitHub Actions secret；部署工作流会先运行质量检查和 `npm run test:integration`，全部成功后才允许认证、应用远端 D1 migrations 并部署 Worker 与静态资源。
 
-在远端迁移或部署前，工作流会只读列出目标 Worker 上的 secret 名称，并确认 `INTERNAL_SIGNALING_TOKEN`、`TURN_KEY_ID`、`TURN_API_TOKEN` 和 `SPARKCALL_WEBHOOK_ENCRYPTION_KEY` 已配置。预检不会读取、打印或传输 secret 值；缺失任一名称即停止。该预检不替代对 Worker 运行行为的实际验证。
+在远端迁移或部署前，工作流会只读列出目标 Worker 上的 secret 名称，并确认 `INTERNAL_SIGNALING_TOKEN`、`TURN_KEY_ID`、`TURN_API_TOKEN`、`SPARKCALL_WEBHOOK_ENCRYPTION_KEY` 和 `TURN_ANALYTICS_API_TOKEN` 已配置。预检不会读取、打印或传输 secret 值；缺失任一名称即停止。该预检不替代对 Worker 运行行为的实际验证。
 
 所有第三方 Actions 都固定到已核对的官方完整提交 SHA，而非可变的 `@v4` 标签：[checkout](https://github.com/actions/checkout/commit/11d5960a326750d5838078e36cf38b85af677262)、[setup-node](https://github.com/actions/setup-node/commit/49933ea5288caeca8642d1e84afbd3f7d6820020)、[upload-artifact](https://github.com/actions/upload-artifact/commit/ea165f8d65b6e75b540449e92b4886f43607fa02)。升级时应核对官方来源并审阅差异后更新 SHA。
 

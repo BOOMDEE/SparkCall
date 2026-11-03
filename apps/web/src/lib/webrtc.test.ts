@@ -45,6 +45,7 @@ class FakePeer {
   readonly addTrack = vi.fn((track: FakeTrack) => { this.sender.track = track; });
   readonly getSenders = vi.fn(() => [this.sender] as unknown as RTCRtpSender[]);
   readonly getTransceivers = vi.fn(() => [] as RTCRtpTransceiver[]);
+  readonly getStats = vi.fn(async () => new Map() as unknown as RTCStatsReport);
   readonly createOffer = vi.fn(async (options?: RTCOfferOptions) => ({ type: "offer" as const, sdp: options?.iceRestart ? "ice-restart-offer" : "offer" }));
   readonly setLocalDescription = vi.fn(async (description: RTCSessionDescriptionInit) => { this.localDescription = description; });
   readonly close = vi.fn();
@@ -131,6 +132,75 @@ describe("CallController TURN credential failures", () => {
 
     await expect(controller.startOutgoing("call-relay-failure", "callee")).rejects.toThrow(/Relay-only calling is unavailable.*TURN unavailable/);
     expect(FakePeer.configs).toHaveLength(0);
+  });
+});
+
+describe("CallController connection mode", () => {
+  afterEach(() => {
+    for (const controller of controllers.splice(0)) controller.destroy();
+    vi.unstubAllGlobals();
+  });
+
+  it("reports P2P only after selected ICE stats identify a non-relay candidate pair", async () => {
+    installWebRtcMocks(vi.fn().mockResolvedValue(new FakeStream(new FakeTrack("audio"))));
+    const controller = createController({ iceServers: [] });
+    await controller.startOutgoing("call-mode-p2p", "callee");
+    const peer = FakePeer.instances[0]!;
+    peer.getStats.mockResolvedValue(new Map([
+      ["transport", { id: "transport", type: "transport", selectedCandidatePairId: "pair" }],
+      ["pair", { id: "pair", type: "candidate-pair", localCandidateId: "local", remoteCandidateId: "remote", state: "succeeded", nominated: true }],
+      ["local", { id: "local", type: "local-candidate", candidateType: "host" }],
+      ["remote", { id: "remote", type: "remote-candidate", candidateType: "srflx" }],
+    ]) as unknown as RTCStatsReport);
+    peer.connectionState = "connected";
+    peer.iceConnectionState = "connected";
+    peer.onconnectionstatechange?.();
+    await vi.waitFor(() => expect(controller.snapshot.connectionMode).toBe("p2p"));
+  });
+
+  it("reports TURN when either selected candidate is relayed", async () => {
+    installWebRtcMocks(vi.fn().mockResolvedValue(new FakeStream(new FakeTrack("audio"))));
+    const controller = createController({ iceServers: [] });
+    await controller.startOutgoing("call-mode-turn", "callee");
+    const peer = FakePeer.instances[0]!;
+    peer.getStats.mockResolvedValue(new Map([
+      ["transport", { id: "transport", type: "transport", selectedCandidatePairId: "pair" }],
+      ["pair", { id: "pair", type: "candidate-pair", localCandidateId: "local", remoteCandidateId: "remote", state: "succeeded", nominated: true }],
+      ["local", { id: "local", type: "local-candidate", candidateType: "relay" }],
+      ["remote", { id: "remote", type: "remote-candidate", candidateType: "srflx" }],
+    ]) as unknown as RTCStatsReport);
+    peer.connectionState = "connected";
+    peer.iceConnectionState = "connected";
+    peer.onconnectionstatechange?.();
+    await vi.waitFor(() => expect(controller.snapshot.connectionMode).toBe("turn"));
+  });
+
+  it("skips TURN credential allocation in P2P-only mode", async () => {
+    installWebRtcMocks(vi.fn().mockResolvedValue(new FakeStream(new FakeTrack("audio"))));
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const controller = createController({ audio: { connectionMode: "p2p" } });
+    await controller.startOutgoing("call-p2p-only", "callee");
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(FakePeer.configs[0]).toMatchObject({ iceServers: [], iceTransportPolicy: "all" });
+  });
+
+  it("keeps Auto calls on a P2P attempt when the TURN limit blocks relay credentials", async () => {
+    installWebRtcMocks(vi.fn().mockResolvedValue(new FakeStream(new FakeTrack("audio"))));
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ iceServers: [], relayUnavailable: true, reason: "monthly_turn_limit_reached" }), { status: 200 })));
+    const controller = createController();
+    await controller.startOutgoing("call-auto-limit", "callee");
+    expect(FakePeer.configs[0]).toMatchObject({ iceServers: [], iceTransportPolicy: "all" });
+    expect(controller.snapshot.relayUnavailable).toBe(true);
+  });
+
+  it("does not restart an active call when the user selects a different mode", async () => {
+    installWebRtcMocks(vi.fn().mockResolvedValue(new FakeStream(new FakeTrack("audio"))));
+    const controller = createController({ iceServers: [] });
+    await controller.startOutgoing("call-mode-next", "callee");
+    await controller.updateAudioOptions({ connectionMode: "turn" });
+    expect(FakePeer.configs).toHaveLength(1);
+    expect(controller.snapshot.connectionState).toBe("new");
   });
 });
 

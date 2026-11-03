@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Mic, MicOff, PhoneCall, PhoneOff, RefreshCw, ShieldCheck, Volume2 } from "lucide-react";
-import { api } from "../lib/api";
+import { api, type UserPreferences } from "../lib/api";
 import { formatElapsed } from "../lib/format";
 import { PageHeader, StatusPill } from "../components/common";
 import { Button, Card, Field, Notice } from "../components/ui";
@@ -25,6 +25,7 @@ export default function DialerPage() {
   const [error, setError] = useState<string | null>(null);
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [deviceError, setDeviceError] = useState<string | null>(null);
+  const [modeSaving, setModeSaving] = useState(false);
   const session = useCallSession();
   const callAttemptRef = useRef(0);
   const call = session.snapshot;
@@ -108,6 +109,14 @@ export default function DialerPage() {
     } catch (cause) {
       setDeviceError(errorMessage(cause, t, "errors.speakerFailed"));
     }
+  }
+
+  async function changeConnectionMode(value: UserPreferences["connectionMode"]) {
+    setModeSaving(true);
+    setError(null);
+    try { await session.updatePreferences({ connectionMode: value }); }
+    catch (cause) { setError(errorMessage(cause, t, "errors.modeSave")); }
+    finally { setModeSaving(false); }
   }
 
   return <>
@@ -204,13 +213,17 @@ export default function DialerPage() {
           </div>
           <span className={`mt-1 h-2 w-2 rounded-full ${session.online ? "bg-green-500" : "bg-amber-500"}`} aria-label={session.online ? t("status.online") : t("status.offline")} />
         </div>
+        <label className="mt-5 block text-xs font-medium text-neutral-600 dark:text-neutral-400"><span className="mb-1.5 block">{t("status.preferredMode")}</span><select aria-label={t("status.preferredMode")} value={session.preferences.connectionMode} disabled={!session.preferencesReady || modeSaving} onChange={(event) => void changeConnectionMode(event.target.value as UserPreferences["connectionMode"])} className="focus-ring block w-full rounded-md border border-neutral-200 bg-transparent px-3 py-2 text-sm text-neutral-900 disabled:opacity-50 dark:border-neutral-800 dark:text-white"><option value="auto">{t("status.connectionModes.auto")}</option><option value="p2p">{t("status.connectionModes.preferredP2p")}</option><option value="turn">{t("status.connectionModes.preferredTurn")}</option></select></label>
+        <p className="mt-2 text-xs leading-5 text-neutral-500">{t("status.modePreferenceDetail")}</p>
         <dl className="mt-6 divide-y divide-neutral-200 border-y border-neutral-200 text-sm dark:divide-neutral-800 dark:border-neutral-800">
           <div className="flex items-center justify-between gap-4 py-3"><dt className="text-neutral-500">{t("status.presence")}</dt><dd>{session.online ? t("status.online") : t("status.offline")}</dd></div>
           <div className="flex items-center justify-between gap-4 py-3"><dt className="text-neutral-500">{t("status.network")}</dt><dd>{t(`status.networkStates.${call.networkOnline ? "online" : "offline"}`)}</dd></div>
           <div className="flex items-center justify-between gap-4 py-3"><dt className="text-neutral-500">{t("status.state")}</dt><dd>{stateLabel}</dd></div>
           <div className="flex items-center justify-between gap-4 py-3"><dt className="text-neutral-500">{t("status.connection")}</dt><dd>{t(`status.connectionStates.${call.connectionState}`)}</dd></div>
+          <div className="flex items-center justify-between gap-4 py-3"><dt className="text-neutral-500">{t("status.currentMode")}</dt><dd>{t(`status.connectionModes.${call.connectionMode}`)}</dd></div>
           <div className="flex items-center justify-between gap-4 py-3"><dt className="text-neutral-500">{t("status.duration")}</dt><dd>{formatElapsed(call.durationMs)}</dd></div>
         </dl>
+        {call.relayUnavailable && <p role="status" aria-live="polite" className="mt-4 rounded-md border border-amber-300 bg-amber-50 p-3 text-xs leading-5 text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">{t("status.relayUnavailable")}</p>}
         {call.recoveryStatus !== "idle" && <p role={call.recoveryStatus === "failed" ? "alert" : "status"} aria-live="polite" className={`mt-4 text-sm leading-6 ${call.recoveryStatus === "failed" ? "text-red-600 dark:text-red-400" : "text-amber-700 dark:text-amber-300"}`}>{t(`status.recovery.${call.recoveryStatus}`)}</p>}
         <div className="mt-5 space-y-2 text-xs leading-5 text-neutral-500">
           <p>{t("status.webrtcNote")}</p>

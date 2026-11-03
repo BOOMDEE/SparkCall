@@ -2,7 +2,7 @@ export type CallState =
   | "IDLE" | "CALLING" | "RINGING" | "CONNECTING" | "CONNECTED" | "ENDED"
   | "REJECTED" | "BUSY" | "TIMEOUT" | "FAILED" | "CANCELLED";
 export type AudioBitratePreset = "low" | "standard" | "high" | "custom";
-export interface TurnResponse { iceServers: RTCIceServer[]; expiresAt?: string; }
+export interface TurnResponse { iceServers: RTCIceServer[]; expiresAt?: string; relayUnavailable?: boolean; reason?: string; limitBytes?: number; }
 export interface CallSnapshot {
   id: string | null;
   state: CallState;
@@ -10,6 +10,8 @@ export interface CallSnapshot {
   durationMs: number;
   muted: boolean;
   connectionState: RTCPeerConnectionState | "new";
+  connectionMode: "unknown" | "p2p" | "turn";
+  relayUnavailable: boolean;
   networkOnline: boolean;
   recoveryStatus: "idle" | "reconnecting" | "recovered" | "failed";
 }
@@ -22,6 +24,7 @@ export interface IncomingCallInvite {
 }
 export interface AudioOptions {
   forceTurn?: boolean;
+  connectionMode?: "auto" | "p2p" | "turn";
   echoCancellation?: boolean;
   noiseSuppression?: boolean;
   autoGainControl?: boolean;
@@ -88,6 +91,8 @@ export class CallController {
   private networkListenersAttached = false;
   private networkOnline = true;
   private recoveryStatus: CallSnapshot["recoveryStatus"] = "idle";
+  private connectionMode: CallSnapshot["connectionMode"] = "unknown";
+  private relayUnavailable = false;
   private readonly handleNetworkOffline = () => {
     this.networkOnline = false;
     this.emit();
@@ -109,6 +114,7 @@ export class CallController {
   private presenceRetryTimer?: number;
   private presenceHeartbeat?: number;
   private durationTimer?: number;
+  private connectionModeTimer?: number;
   private presenceStopped = false;
   private sessionInvalid = false;
   private pendingCandidates: RTCIceCandidateInit[] = [];
@@ -116,7 +122,8 @@ export class CallController {
 
   constructor(options: CallControllerOptions = {}) {
     this.options = options;
-    this.audio = { forceTurn: false, echoCancellation: true, noiseSuppression: true, autoGainControl: true, bitrateMode: "standard", bitrateKbps: 32, ...options.audio };
+    this.audio = { forceTurn: false, connectionMode: "auto", echoCancellation: true, noiseSuppression: true, autoGainControl: true, bitrateMode: "standard", bitrateKbps: 32, ...options.audio };
+    if (!options.audio?.connectionMode && options.audio?.forceTurn) this.audio.connectionMode = "turn";
     this.networkOnline = typeof navigator === "undefined" || navigator.onLine !== false;
   }
 
@@ -133,6 +140,8 @@ export class CallController {
   async updateAudioOptions(options: AudioOptions): Promise<void> {
     const previous = this.audio;
     this.audio = { ...this.audio, ...options };
+    if (options.connectionMode === "auto" || options.connectionMode === "p2p" || options.connectionMode === "turn") this.audio.forceTurn = options.connectionMode === "turn";
+    else if (typeof options.forceTurn === "boolean") this.audio.connectionMode = options.forceTurn ? "turn" : "auto";
     if (options.audioOutputDeviceId !== undefined && options.audioOutputDeviceId !== previous.audioOutputDeviceId && this.remoteAudio) {
       await this.applyAudioOutputPreference();
     }
@@ -359,12 +368,15 @@ export class CallController {
     if (generation !== this.generation) { stream.getTracks().forEach((track) => track.stop()); return; }
     for (const track of stream.getAudioTracks()) track.enabled = !this.muted;
     this.localStream = stream;
+    const mode = this.preferredConnectionMode();
     let servers = this.options.iceServers;
-    if (servers === undefined) {
+    if (mode === "p2p") {
+      servers = this.stunOnly(servers ?? []);
+    } else if (servers === undefined) {
       try {
         servers = await this.fetchTurnServers();
       } catch (error) {
-        if (this.audio.forceTurn) {
+        if (mode === "turn") {
           const cause = normalizeError(error);
           cause.message = `Relay-only calling is unavailable because TURN credentials could not be loaded. ${cause.message}`;
           throw cause;
@@ -372,8 +384,9 @@ export class CallController {
         servers = [];
       }
     }
+    if (mode === "turn" && this.relayUnavailable) throw new Error("The monthly TURN relay limit was reached. TURN-only calling is unavailable until the limit resets.");
     if (generation !== this.generation) { stream.getTracks().forEach((track) => track.stop()); return; }
-    this.peer = new RTCPeerConnection({ iceServers: servers, iceTransportPolicy: this.audio.forceTurn ? "relay" : "all" });
+    this.peer = new RTCPeerConnection({ iceServers: servers, iceTransportPolicy: mode === "turn" ? "relay" : "all" });
     this.attachNetworkListeners();
     this.emit();
     const peer = this.peer;
@@ -396,10 +409,13 @@ export class CallController {
         this.reconnectAttempts = 0;
         this.markIceRecovered();
         this.setState("CONNECTED");
+        this.syncConnectionModePolling(peer);
         this.send({ type: "connected" });
       } else if (state === "failed") {
+        this.syncConnectionModePolling(peer);
         this.startIceRecovery(0);
       } else if (state === "disconnected") {
+        this.syncConnectionModePolling(peer);
         this.startIceRecovery(ICE_DISCONNECT_GRACE_MS);
       } else if (state === "connecting") {
         this.setState("CONNECTING");
@@ -408,9 +424,16 @@ export class CallController {
     };
     peer.oniceconnectionstatechange = () => {
       if (this.peer !== peer || generation !== this.generation) return;
-      if (peer.iceConnectionState === "connected" || peer.iceConnectionState === "completed") this.markIceRecovered();
-      else if (peer.iceConnectionState === "disconnected") this.startIceRecovery(ICE_DISCONNECT_GRACE_MS);
-      else if (peer.iceConnectionState === "failed") this.startIceRecovery(0);
+      if (peer.iceConnectionState === "connected" || peer.iceConnectionState === "completed") {
+        this.markIceRecovered();
+        this.syncConnectionModePolling(peer);
+      } else if (peer.iceConnectionState === "disconnected") {
+        this.syncConnectionModePolling(peer);
+        this.startIceRecovery(ICE_DISCONNECT_GRACE_MS);
+      } else if (peer.iceConnectionState === "failed") {
+        this.syncConnectionModePolling(peer);
+        this.startIceRecovery(0);
+      }
     };
     await this.applyBitrate();
   }
@@ -517,6 +540,10 @@ export class CallController {
       throw new Error(payload.error?.message ?? `TURN credentials are unavailable (${response.status}).`);
     }
     const data = await response.json() as TurnResponse;
+    if (data.relayUnavailable) {
+      this.relayUnavailable = true;
+      return [];
+    }
     if (!Array.isArray(data.iceServers) || !data.iceServers.length) throw new Error("The TURN service returned no ICE servers.");
     return data.iceServers;
   }
@@ -633,6 +660,55 @@ export class CallController {
     } catch { /* Some browsers do not support changing sender bitrate. */ }
   }
 
+  private preferredConnectionMode(): "auto" | "p2p" | "turn" {
+    if (this.audio.connectionMode === "auto" || this.audio.connectionMode === "p2p" || this.audio.connectionMode === "turn") return this.audio.connectionMode;
+    return this.audio.forceTurn ? "turn" : "auto";
+  }
+
+  private stunOnly(servers: RTCIceServer[]): RTCIceServer[] {
+    return servers.flatMap((server) => {
+      const urls = typeof server.urls === "string" ? [server.urls] : server.urls ?? [];
+      const stunUrls = urls.filter((url) => /^stuns?:/i.test(url));
+      return stunUrls.length ? [{ urls: stunUrls }] : [];
+    });
+  }
+
+  private syncConnectionModePolling(peer: RTCPeerConnection): void {
+    const connected = peer.connectionState === "connected"
+      && (peer.iceConnectionState === "connected" || peer.iceConnectionState === "completed");
+    if (!connected) {
+      if (this.connectionModeTimer !== undefined) window.clearInterval(this.connectionModeTimer);
+      this.connectionModeTimer = undefined;
+      if (this.connectionMode !== "unknown") { this.connectionMode = "unknown"; this.emit(); }
+      return;
+    }
+    if (this.connectionModeTimer === undefined) this.connectionModeTimer = window.setInterval(() => void this.refreshConnectionMode(peer), 2_000);
+    void this.refreshConnectionMode(peer);
+  }
+
+  private async refreshConnectionMode(peer: RTCPeerConnection): Promise<void> {
+    if (this.peer !== peer || typeof peer.getStats !== "function") return;
+    try {
+      const report = await peer.getStats();
+      if (this.peer !== peer || peer.connectionState !== "connected" || !(peer.iceConnectionState === "connected" || peer.iceConnectionState === "completed")) return;
+      const stats = Array.from(report.values()) as unknown as Array<Record<string, unknown>>;
+      const transport = stats.find((item) => item.type === "transport" && typeof item.selectedCandidatePairId === "string");
+      const pair = stats.find((item) => item.type === "candidate-pair" && (
+        item.id === transport?.selectedCandidatePairId || item.selected === true || (item.state === "succeeded" && item.nominated === true)
+      ));
+      if (!pair) return;
+      const local = stats.find((item) => item.id === pair.localCandidateId);
+      const remote = stats.find((item) => item.id === pair.remoteCandidateId);
+      const localType = local?.candidateType;
+      const remoteType = remote?.candidateType;
+      if (typeof localType !== "string" || typeof remoteType !== "string") return;
+      const mode = localType === "relay" || remoteType === "relay" ? "turn" : "p2p";
+      if (this.connectionMode !== mode) { this.connectionMode = mode; this.emit(); }
+    } catch {
+      // Browser statistics are best-effort; leave the path unknown rather than guessing.
+    }
+  }
+
   private preferOpusCodec(): void {
     const transceiver = this.peer?.getTransceivers().find((item) => item.sender.track?.kind === "audio");
     const codecs = RTCRtpSender.getCapabilities("audio")?.codecs;
@@ -673,7 +749,7 @@ export class CallController {
   }
   private emit(): void { this.options.onChange?.(this.currentSnapshot()); }
   private currentSnapshot(): CallSnapshot {
-    return { id: this.id, state: this.state, role: this.role, durationMs: this.connectedAt ? Date.now() - this.connectedAt : 0, muted: this.muted, connectionState: this.peer?.connectionState ?? "new", networkOnline: this.networkOnline, recoveryStatus: this.recoveryStatus };
+    return { id: this.id, state: this.state, role: this.role, durationMs: this.connectedAt ? Date.now() - this.connectedAt : 0, muted: this.muted, connectionState: this.peer?.connectionState ?? "new", connectionMode: this.connectionMode, relayUnavailable: this.relayUnavailable, networkOnline: this.networkOnline, recoveryStatus: this.recoveryStatus };
   }
   private invalidateSession(): void {
     if (this.sessionInvalid) return;
@@ -703,6 +779,10 @@ export class CallController {
     this.reconnectTimer = undefined;
     this.clearIceRestartTimer();
     this.iceRestartInFlight = false;
+    if (this.connectionModeTimer !== undefined) window.clearInterval(this.connectionModeTimer);
+    this.connectionModeTimer = undefined;
+    this.connectionMode = "unknown";
+    this.relayUnavailable = false;
     this.detachNetworkListeners();
     const socket = this.socket;
     this.socket = undefined;

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { Activity, Ban, History, LayoutDashboard, LogOut, Menu, Mic, MicOff, Moon, Phone, PhoneCall, PhoneOff, Settings, Sun, Users, X } from "lucide-react";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Activity, Ban, History, LayoutDashboard, LogOut, Menu, Mic, MicOff, Moon, PhoneCall, PhoneOff, Settings, Sun, Users, X } from "lucide-react";
 import { api, type Me } from "../lib/api";
 import { formatDate } from "../lib/format";
 import { Button, Notice, useFocusTrap } from "../components/ui";
@@ -8,6 +8,7 @@ import { LanguageSwitcher } from "../components/LanguageSwitcher";
 import { SiteFooter } from "../components/SiteFooter";
 import { CallSessionProvider, useCallSession } from "../contexts/CallSession";
 import { useTranslation } from "react-i18next";
+import { BrandLink } from "../components/BrandLink";
 
 const NAV = [
   ["/dashboard", "overview", LayoutDashboard], ["/call", "dialer", PhoneCall], ["/contacts", "contacts", Users],
@@ -91,7 +92,7 @@ function Workspace({ me: initialMe }: { me: Me }) {
     <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-neutral-200 bg-white/95 px-4 backdrop-blur-sm dark:border-neutral-800 dark:bg-black/95 lg:px-8">
       <div className="flex items-center gap-3">
         <button ref={menuButtonRef} className="focus-ring rounded p-1 lg:hidden" aria-label={mobile ? t("actions.closeNavigation") : t("actions.openNavigation")} aria-expanded={mobile} aria-controls="main-navigation" onClick={() => setMobile(!mobile)}>{mobile ? <X size={19} aria-hidden="true" /> : <Menu size={19} aria-hidden="true" />}</button>
-        <Link to="/dashboard" className="flex items-center gap-2 text-sm font-semibold tracking-tight" aria-label={t("brand.homeLabel")}><span className="grid h-6 w-6 place-items-center rounded bg-neutral-900 text-white dark:bg-white dark:text-black"><Phone size={13} fill="currentColor" aria-hidden="true" /></span>{t("brand.name")}</Link>
+        <BrandLink to="/dashboard" className="flex items-center gap-2 text-sm font-semibold tracking-tight" markClassName="grid h-6 w-6 place-items-center rounded bg-neutral-900 text-white dark:bg-white dark:text-black" iconSize={13} filled />
       </div>
       <div className="flex items-center gap-1.5"><span className="hidden items-center gap-1.5 px-2 text-xs text-neutral-500 sm:inline-flex"><span className={`h-1.5 w-1.5 rounded-full ${session.online ? "bg-green-500" : "bg-neutral-400"}`} aria-hidden="true" />{session.online ? t("status.online") : t("status.offline")}</span><LanguageSwitcher /><Button variant="ghost" className="px-2" aria-label={isDark ? t("actions.switchToLight") : t("actions.switchToDark")} onClick={() => void toggleTheme()}>{isDark ? <Sun size={16} aria-hidden="true" /> : <Moon size={16} aria-hidden="true" />}</Button><div className="ml-1 grid h-7 w-7 place-items-center rounded-full border border-neutral-200 bg-neutral-50 text-xs font-medium dark:border-neutral-800 dark:bg-neutral-900" title={me.displayName}>{(me.displayName || me.username || "?").slice(0, 1).toUpperCase()}</div><Button variant="ghost" className="px-2" aria-label={t("actions.signOut")} onClick={() => void logout()}><LogOut size={16} aria-hidden="true" /></Button></div>
     </header>

@@ -11,9 +11,10 @@ import { AuthenticatedLayout } from "./layouts/AuthenticatedLayout";
 import PublicRecordPage from "./pages/PublicRecordPage";
 import RecordsPage from "./pages/RecordsPage";
 import NotFoundPage from "./pages/NotFoundPage";
+import { SiteConfigurationProvider } from "./contexts/SiteConfiguration";
 
 export default function App() {
-  return <Routes>
+  return <SiteConfigurationProvider><Routes>
     <Route path="/" element={<LandingPage />} />
     <Route path="/login" element={<AuthPage mode="login" />} />
     <Route path="/register" element={<AuthPage mode="register" />} />
@@ -31,5 +32,5 @@ export default function App() {
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
     </Route>
     <Route path="*" element={<NotFoundPage />} />
-  </Routes>;
+  </Routes></SiteConfigurationProvider>;
 }
