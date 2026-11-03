@@ -30,7 +30,7 @@ type CallSessionValue = {
   resumeRemoteAudio: () => Promise<void>;
 };
 const CallSessionContext = createContext<CallSessionValue | null>(null);
-const IDLE: CallSnapshot = { id: null, state: "IDLE", role: null, durationMs: 0, muted: false, connectionState: "new" };
+const IDLE: CallSnapshot = { id: null, state: "IDLE", role: null, durationMs: 0, muted: false, connectionState: "new", networkOnline: true, recoveryStatus: "idle" };
 const TERMINAL = new Set(["ENDED", "REJECTED", "BUSY", "TIMEOUT", "FAILED", "CANCELLED"]);
 
 export function useCallSession() {

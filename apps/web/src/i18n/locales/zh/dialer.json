@@ -66,11 +66,22 @@
   "status": {
     "eyebrow": "实时详情",
     "presence": "在线状态",
+    "network": "设备网络",
     "state": "通话状态",
     "connection": "WebRTC 连接",
     "duration": "时长",
     "online": "已连接",
     "offline": "正在重连",
+    "networkStates": {
+      "online": "设备显示在线",
+      "offline": "设备显示离线"
+    },
+    "recovery": {
+      "idle": "",
+      "reconnecting": "网络连接中断，正在尝试自动恢复通话…",
+      "recovered": "通话网络连接已恢复。",
+      "failed": "无法自动恢复通话。请检查网络后重新拨打。"
+    },
     "connectionStates": {
       "new": "新建",
       "connecting": "连接中",
@@ -80,7 +91,7 @@
       "closed": "已关闭"
     },
     "webrtcNote": "通话使用 WebRTC。Cloudflare TURN 凭据由服务器获取，不会暴露为长期账号凭据。",
-    "failureHint": "如果连接失败，请确认此部署已配置 TURN 凭据，然后重试。"
+    "failureHint": "网络波动时，主叫方最多会自动重试两次。若仍失败，请检查网络以及此部署的 TURN 配置后重拨。"
   },
   "errors": {
     "missingNumber": "请输入 SparkCall 号码后再呼叫。",

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { CallController } from "./webrtc";
 
 const controllers: CallController[] = [];
+afterEach(() => { vi.useRealTimers(); });
 function createController(options: ConstructorParameters<typeof CallController>[0] = {}) {
   const controller = new CallController(options);
   controllers.push(controller);
@@ -35,7 +36,8 @@ class FakeSender {
 
 class FakePeer {
   static configs: RTCConfiguration[] = [];
-  constructor(config: RTCConfiguration) { FakePeer.configs.push(config); }
+  static instances: FakePeer[] = [];
+  constructor(config: RTCConfiguration) { FakePeer.configs.push(config); FakePeer.instances.push(this); }
   connectionState: RTCPeerConnectionState = "new";
   iceConnectionState: RTCIceConnectionState = "new";
   localDescription: RTCSessionDescriptionInit | null = null;
@@ -43,7 +45,7 @@ class FakePeer {
   readonly addTrack = vi.fn((track: FakeTrack) => { this.sender.track = track; });
   readonly getSenders = vi.fn(() => [this.sender] as unknown as RTCRtpSender[]);
   readonly getTransceivers = vi.fn(() => [] as RTCRtpTransceiver[]);
-  readonly createOffer = vi.fn(async () => ({ type: "offer" as const, sdp: "offer" }));
+  readonly createOffer = vi.fn(async (options?: RTCOfferOptions) => ({ type: "offer" as const, sdp: options?.iceRestart ? "ice-restart-offer" : "offer" }));
   readonly setLocalDescription = vi.fn(async (description: RTCSessionDescriptionInit) => { this.localDescription = description; });
   readonly close = vi.fn();
   onicecandidate: ((event: RTCPeerConnectionIceEvent) => void) | null = null;
@@ -69,17 +71,22 @@ class FakeWebSocket {
 function installWebRtcMocks(getUserMedia: typeof navigator.mediaDevices.getUserMedia) {
   FakeWebSocket.instances = [];
   FakePeer.configs = [];
+  FakePeer.instances = [];
   vi.stubGlobal("MediaStream", class { getTracks(): FakeTrack[] { return []; } });
   vi.stubGlobal("WebSocket", FakeWebSocket);
   vi.stubGlobal("RTCPeerConnection", FakePeer);
   vi.stubGlobal("RTCRtpSender", { getCapabilities: () => ({ codecs: [] }) });
   vi.stubGlobal("navigator", { mediaDevices: { getUserMedia } });
+  const listeners = new Map<string, Set<() => void>>();
   vi.stubGlobal("window", {
     location: { href: "https://sparkcall.test/" },
     setTimeout,
     clearTimeout,
     setInterval,
     clearInterval,
+    addEventListener: (type: string, listener: () => void) => { const group = listeners.get(type) ?? new Set(); group.add(listener); listeners.set(type, group); },
+    removeEventListener: (type: string, listener: () => void) => { listeners.get(type)?.delete(listener); },
+    dispatch: (type: string) => { for (const listener of listeners.get(type) ?? []) listener(); },
   });
 }
 
@@ -124,6 +131,112 @@ describe("CallController TURN credential failures", () => {
 
     await expect(controller.startOutgoing("call-relay-failure", "callee")).rejects.toThrow(/Relay-only calling is unavailable.*TURN unavailable/);
     expect(FakePeer.configs).toHaveLength(0);
+  });
+});
+
+describe("CallController automatic ICE recovery", () => {
+  afterEach(() => {
+    for (const controller of controllers.splice(0)) controller.destroy();
+    vi.unstubAllGlobals();
+  });
+
+  it("sends a restart offer after a sustained disconnect and reports recovery", async () => {
+    vi.useFakeTimers();
+    installWebRtcMocks(vi.fn().mockResolvedValue(new FakeStream(new FakeTrack("audio"))));
+    const controller = createController({ iceServers: [] });
+    await controller.startOutgoing("call-ice-restart", "callee");
+    const peer = FakePeer.instances[0]!;
+    peer.connectionState = "connected";
+    peer.iceConnectionState = "connected";
+    peer.onconnectionstatechange?.();
+    peer.iceConnectionState = "disconnected";
+    peer.oniceconnectionstatechange?.();
+    expect(controller.snapshot.recoveryStatus).toBe("reconnecting");
+
+    await vi.advanceTimersByTimeAsync(1_500);
+
+    expect(peer.createOffer).toHaveBeenLastCalledWith({ iceRestart: true });
+    expect(FakeWebSocket.instances[0]?.send).toHaveBeenCalledWith(JSON.stringify({ type: "offer", payload: { type: "offer", sdp: "ice-restart-offer" } }));
+    expect(controller.snapshot.state).toBe("CONNECTING");
+    peer.connectionState = "connected";
+    peer.iceConnectionState = "connected";
+    peer.oniceconnectionstatechange?.();
+    peer.onconnectionstatechange?.();
+    expect(controller.snapshot.state).toBe("CONNECTED");
+    expect(controller.snapshot.recoveryStatus).toBe("recovered");
+  });
+
+  it("cancels the restart when ICE recovers during the disconnect grace period", async () => {
+    vi.useFakeTimers();
+    installWebRtcMocks(vi.fn().mockResolvedValue(new FakeStream(new FakeTrack("audio"))));
+    const controller = createController({ iceServers: [] });
+    await controller.startOutgoing("call-ice-flap", "callee");
+    const peer = FakePeer.instances[0]!;
+    peer.connectionState = "connected";
+    peer.iceConnectionState = "connected";
+    peer.onconnectionstatechange?.();
+    peer.iceConnectionState = "disconnected";
+    peer.oniceconnectionstatechange?.();
+    peer.iceConnectionState = "connected";
+    peer.oniceconnectionstatechange?.();
+    await vi.advanceTimersByTimeAsync(1_500);
+
+    expect(peer.createOffer).toHaveBeenCalledTimes(1);
+    expect(controller.snapshot.recoveryStatus).toBe("recovered");
+  });
+
+  it("waits while the device is offline and resumes recovery when it returns online", async () => {
+    vi.useFakeTimers();
+    installWebRtcMocks(vi.fn().mockResolvedValue(new FakeStream(new FakeTrack("audio"))));
+    const controller = createController({ iceServers: [] });
+    await controller.startOutgoing("call-network-toggle", "callee");
+    const peer = FakePeer.instances[0]!;
+    peer.iceConnectionState = "disconnected";
+    peer.oniceconnectionstatechange?.();
+    (window as unknown as { dispatch: (type: string) => void }).dispatch("offline");
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(controller.snapshot.networkOnline).toBe(false);
+    expect(peer.createOffer).toHaveBeenCalledTimes(1);
+
+    (window as unknown as { dispatch: (type: string) => void }).dispatch("online");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(controller.snapshot.networkOnline).toBe(true);
+    expect(peer.createOffer).toHaveBeenLastCalledWith({ iceRestart: true });
+  });
+
+  it("stops after two restart attempts instead of looping indefinitely", async () => {
+    vi.useFakeTimers();
+    installWebRtcMocks(vi.fn().mockResolvedValue(new FakeStream(new FakeTrack("audio"))));
+    const controller = createController({ iceServers: [] });
+    await controller.startOutgoing("call-restart-limit", "callee");
+    const peer = FakePeer.instances[0]!;
+    peer.connectionState = "failed";
+    peer.iceConnectionState = "failed";
+    peer.onconnectionstatechange?.();
+    peer.oniceconnectionstatechange?.();
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(8_000);
+    await vi.advanceTimersByTimeAsync(8_000);
+
+    expect(peer.createOffer).toHaveBeenCalledTimes(3);
+    expect(controller.snapshot.state).toBe("FAILED");
+    expect(controller.snapshot.recoveryStatus).toBe("failed");
+  });
+
+  it("clears a pending restart when the caller hangs up", async () => {
+    vi.useFakeTimers();
+    installWebRtcMocks(vi.fn().mockResolvedValue(new FakeStream(new FakeTrack("audio"))));
+    const controller = createController({ iceServers: [] });
+    await controller.startOutgoing("call-restart-cancel", "callee");
+    const peer = FakePeer.instances[0]!;
+    peer.iceConnectionState = "disconnected";
+    peer.oniceconnectionstatechange?.();
+    controller.hangup();
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    expect(peer.createOffer).toHaveBeenCalledTimes(1);
+    expect(peer.oniceconnectionstatechange).toBeNull();
+    expect(controller.snapshot.recoveryStatus).toBe("idle");
   });
 });
 

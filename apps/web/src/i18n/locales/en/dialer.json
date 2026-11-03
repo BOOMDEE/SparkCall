@@ -66,11 +66,22 @@
   "status": {
     "eyebrow": "Live details",
     "presence": "Presence",
+    "network": "Device network",
     "state": "Call state",
     "connection": "WebRTC connection",
     "duration": "Duration",
     "online": "Connected",
     "offline": "Reconnecting",
+    "networkStates": {
+      "online": "Device reports online",
+      "offline": "Device reports offline"
+    },
+    "recovery": {
+      "idle": "",
+      "reconnecting": "The network connection was interrupted. Trying to restore the call…",
+      "recovered": "The call network connection has recovered.",
+      "failed": "The call could not be restored automatically. Check your network and call again."
+    },
     "connectionStates": {
       "new": "New",
       "connecting": "Connecting",
@@ -80,7 +91,7 @@
       "closed": "Closed"
     },
     "webrtcNote": "Calls use WebRTC. Cloudflare TURN credentials are fetched server-side and are never exposed as long-lived account credentials.",
-    "failureHint": "If the connection fails, confirm TURN credentials are configured for this deployment and try again."
+    "failureHint": "When the network drops, the caller makes up to two automatic recovery attempts. If recovery fails, check your network and this deployment’s TURN configuration before calling again."
   },
   "errors": {
     "missingNumber": "Enter a SparkCall number before calling.",

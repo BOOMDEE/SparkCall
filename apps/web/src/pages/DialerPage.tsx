@@ -206,10 +206,12 @@ export default function DialerPage() {
         </div>
         <dl className="mt-6 divide-y divide-neutral-200 border-y border-neutral-200 text-sm dark:divide-neutral-800 dark:border-neutral-800">
           <div className="flex items-center justify-between gap-4 py-3"><dt className="text-neutral-500">{t("status.presence")}</dt><dd>{session.online ? t("status.online") : t("status.offline")}</dd></div>
+          <div className="flex items-center justify-between gap-4 py-3"><dt className="text-neutral-500">{t("status.network")}</dt><dd>{t(`status.networkStates.${call.networkOnline ? "online" : "offline"}`)}</dd></div>
           <div className="flex items-center justify-between gap-4 py-3"><dt className="text-neutral-500">{t("status.state")}</dt><dd>{stateLabel}</dd></div>
           <div className="flex items-center justify-between gap-4 py-3"><dt className="text-neutral-500">{t("status.connection")}</dt><dd>{t(`status.connectionStates.${call.connectionState}`)}</dd></div>
           <div className="flex items-center justify-between gap-4 py-3"><dt className="text-neutral-500">{t("status.duration")}</dt><dd>{formatElapsed(call.durationMs)}</dd></div>
         </dl>
+        {call.recoveryStatus !== "idle" && <p role={call.recoveryStatus === "failed" ? "alert" : "status"} aria-live="polite" className={`mt-4 text-sm leading-6 ${call.recoveryStatus === "failed" ? "text-red-600 dark:text-red-400" : "text-amber-700 dark:text-amber-300"}`}>{t(`status.recovery.${call.recoveryStatus}`)}</p>}
         <div className="mt-5 space-y-2 text-xs leading-5 text-neutral-500">
           <p>{t("status.webrtcNote")}</p>
           <p>{t("status.failureHint")}</p>

@@ -10,6 +10,8 @@ export interface CallSnapshot {
   durationMs: number;
   muted: boolean;
   connectionState: RTCPeerConnectionState | "new";
+  networkOnline: boolean;
+  recoveryStatus: "idle" | "reconnecting" | "recovered" | "failed";
 }
 export interface IncomingCallInvite {
   callId: string;
@@ -47,6 +49,9 @@ interface Envelope { type: string; [key: string]: unknown; }
 const TERMINAL: CallState[] = ["ENDED", "REJECTED", "BUSY", "TIMEOUT", "FAILED", "CANCELLED"];
 const BITRATES: Record<Exclude<AudioBitratePreset, "custom">, number> = { low: 16, standard: 32, high: 64 };
 const MAX_RECONNECTS = 3;
+const MAX_ICE_RESTARTS = 2;
+const ICE_DISCONNECT_GRACE_MS = 1_500;
+const ICE_RESTART_TIMEOUT_MS = 7_500;
 
 function asState(value: unknown): CallState | null {
   const states: CallState[] = ["IDLE", "CALLING", "RINGING", "CONNECTING", "CONNECTED", ...TERMINAL];
@@ -77,6 +82,30 @@ export class CallController {
   private generation = 0;
   private reconnectAttempts = 0;
   private reconnectTimer?: number;
+  private iceRestartAttempts = 0;
+  private iceRestartTimer?: number;
+  private iceRestartInFlight = false;
+  private networkListenersAttached = false;
+  private networkOnline = true;
+  private recoveryStatus: CallSnapshot["recoveryStatus"] = "idle";
+  private readonly handleNetworkOffline = () => {
+    this.networkOnline = false;
+    this.emit();
+  };
+  private readonly handleNetworkOnline = () => {
+    this.networkOnline = true;
+    const iceState = this.peer?.iceConnectionState;
+    const connectionState = this.peer?.connectionState;
+    const connected = connectionState === "connected" && (iceState === "connected" || iceState === "completed");
+    const interrupted = iceState === "disconnected" || iceState === "failed" || connectionState === "disconnected" || connectionState === "failed";
+    if (this.peer && !connected && (interrupted || this.recoveryStatus === "reconnecting" && this.iceRestartAttempts > 0)) {
+      this.startIceRecovery(0);
+    } else {
+      if (connected && this.recoveryStatus === "reconnecting") this.markIceRecovered();
+      else if (this.recoveryStatus === "reconnecting" && (iceState === "new" || iceState === "checking") && this.iceRestartAttempts === 0) this.recoveryStatus = "idle";
+      this.emit();
+    }
+  };
   private presenceRetryTimer?: number;
   private presenceHeartbeat?: number;
   private durationTimer?: number;
@@ -88,6 +117,7 @@ export class CallController {
   constructor(options: CallControllerOptions = {}) {
     this.options = options;
     this.audio = { forceTurn: false, echoCancellation: true, noiseSuppression: true, autoGainControl: true, bitrateMode: "standard", bitrateKbps: 32, ...options.audio };
+    this.networkOnline = typeof navigator === "undefined" || navigator.onLine !== false;
   }
 
   get snapshot(): CallSnapshot { return this.currentSnapshot(); }
@@ -125,6 +155,9 @@ export class CallController {
     this.id = callId;
     this.role = "caller";
     this.reconnectAttempts = 0;
+    this.iceRestartAttempts = 0;
+    this.recoveryStatus = "idle";
+    this.networkOnline = typeof navigator === "undefined" || navigator.onLine !== false;
     this.setState("CALLING");
     try {
       await this.openMediaAndPeer(generation);
@@ -149,6 +182,9 @@ export class CallController {
     this.id = callId;
     this.role = "callee";
     this.reconnectAttempts = 0;
+    this.iceRestartAttempts = 0;
+    this.recoveryStatus = "idle";
+    this.networkOnline = typeof navigator === "undefined" || navigator.onLine !== false;
     this.setState("RINGING");
     try {
       await this.openMediaAndPeer(generation);
@@ -255,6 +291,7 @@ export class CallController {
     this.generation++;
     if (this.presenceRetryTimer) window.clearTimeout(this.presenceRetryTimer);
     if (this.reconnectTimer) window.clearTimeout(this.reconnectTimer);
+    this.clearIceRestartTimer();
     if (this.presenceHeartbeat) window.clearInterval(this.presenceHeartbeat);
     this.presenceSocket?.close(1000, "Session closed");
     this.presenceSocket = undefined;
@@ -337,34 +374,140 @@ export class CallController {
     }
     if (generation !== this.generation) { stream.getTracks().forEach((track) => track.stop()); return; }
     this.peer = new RTCPeerConnection({ iceServers: servers, iceTransportPolicy: this.audio.forceTurn ? "relay" : "all" });
+    this.attachNetworkListeners();
+    this.emit();
+    const peer = this.peer;
     for (const track of stream.getTracks()) {
       track.enabled = !this.muted;
-      this.peer.addTrack(track, stream);
+      peer.addTrack(track, stream);
     }
     this.preferOpusCodec();
-    this.peer.onicecandidate = (event) => { if (event.candidate) this.send({ type: "ice-candidate", payload: event.candidate.toJSON() }); };
-    this.peer.ontrack = (event) => {
+    peer.onicecandidate = (event) => { if (this.peer === peer && generation === this.generation && event.candidate) this.send({ type: "ice-candidate", payload: event.candidate.toJSON() }); };
+    peer.ontrack = (event) => {
+      if (this.peer !== peer || generation !== this.generation) return;
       const tracks = event.streams[0]?.getTracks() ?? [event.track];
       for (const track of tracks) if (!this.remoteStream.getTracks().some((existing) => existing.id === track.id)) this.remoteStream.addTrack(track);
       if (this.remoteAudio) { this.remoteAudio.srcObject = this.remoteStream; void this.playRemoteAudio(); }
     };
-    this.peer.onconnectionstatechange = () => {
-      const state = this.peer?.connectionState;
+    peer.onconnectionstatechange = () => {
+      if (this.peer !== peer || generation !== this.generation) return;
+      const state = peer.connectionState;
       if (state === "connected") {
         this.reconnectAttempts = 0;
+        this.markIceRecovered();
         this.setState("CONNECTED");
         this.send({ type: "connected" });
       } else if (state === "failed") {
-        this.fail(new Error("The audio connection failed. Check your network and TURN setup."));
+        this.startIceRecovery(0);
+      } else if (state === "disconnected") {
+        this.startIceRecovery(ICE_DISCONNECT_GRACE_MS);
       } else if (state === "connecting") {
         this.setState("CONNECTING");
       }
       this.emit();
     };
-    this.peer.oniceconnectionstatechange = () => {
-      if (this.peer?.iceConnectionState === "disconnected" && this.state === "CONNECTED") this.setState("CONNECTING");
+    peer.oniceconnectionstatechange = () => {
+      if (this.peer !== peer || generation !== this.generation) return;
+      if (peer.iceConnectionState === "connected" || peer.iceConnectionState === "completed") this.markIceRecovered();
+      else if (peer.iceConnectionState === "disconnected") this.startIceRecovery(ICE_DISCONNECT_GRACE_MS);
+      else if (peer.iceConnectionState === "failed") this.startIceRecovery(0);
     };
     await this.applyBitrate();
+  }
+
+  private attachNetworkListeners(): void {
+    if (this.networkListenersAttached) return;
+    this.networkOnline = typeof navigator === "undefined" || navigator.onLine !== false;
+    window.addEventListener("offline", this.handleNetworkOffline);
+    window.addEventListener("online", this.handleNetworkOnline);
+    this.networkListenersAttached = true;
+  }
+
+  private detachNetworkListeners(): void {
+    if (!this.networkListenersAttached) return;
+    window.removeEventListener("offline", this.handleNetworkOffline);
+    window.removeEventListener("online", this.handleNetworkOnline);
+    this.networkListenersAttached = false;
+  }
+
+  private startIceRecovery(delay: number): void {
+    const peer = this.peer;
+    if (!peer || TERMINAL.includes(this.state)) return;
+    this.recoveryStatus = "reconnecting";
+    if (this.state === "CONNECTED") this.setState("CONNECTING");
+    else this.emit();
+    // Keep one negotiation initiator so both peers cannot race restart offers.
+    if (!this.networkOnline || this.role !== "caller" || this.iceRestartInFlight) return;
+    if (this.iceRestartTimer) {
+      if (delay !== 0) return;
+      this.clearIceRestartTimer();
+    }
+    if (this.iceRestartAttempts >= MAX_ICE_RESTARTS) {
+      this.exhaustIceRestarts();
+      return;
+    }
+    const generation = this.generation;
+    this.iceRestartTimer = window.setTimeout(() => {
+      this.iceRestartTimer = undefined;
+      void this.restartIce(peer, generation);
+    }, delay);
+  }
+
+  private async restartIce(peer: RTCPeerConnection, generation: number): Promise<void> {
+    if (this.peer !== peer || generation !== this.generation || TERMINAL.includes(this.state)) return;
+    if (!this.networkOnline) return;
+    if (this.socket?.readyState !== WebSocket.OPEN) {
+      this.startIceRecovery(1_000);
+      return;
+    }
+    if (this.iceRestartAttempts >= MAX_ICE_RESTARTS) {
+      this.exhaustIceRestarts();
+      return;
+    }
+    this.iceRestartAttempts += 1;
+    this.iceRestartInFlight = true;
+    try {
+      const offer = await peer.createOffer({ iceRestart: true });
+      if (this.peer !== peer || generation !== this.generation || TERMINAL.includes(this.state)) return;
+      await peer.setLocalDescription(offer);
+      if (this.peer !== peer || generation !== this.generation || TERMINAL.includes(this.state)) return;
+      if (!this.networkOnline) { this.iceRestartInFlight = false; return; }
+      if (this.socket?.readyState !== WebSocket.OPEN) {
+        this.iceRestartInFlight = false;
+        this.startIceRecovery(1_000);
+        return;
+      }
+      const localOffer = peer.localDescription;
+      this.send({ type: "offer", payload: localOffer ? { type: localOffer.type, sdp: localOffer.sdp } : offer });
+      this.iceRestartInFlight = false;
+      this.iceRestartTimer = window.setTimeout(() => {
+        this.iceRestartTimer = undefined;
+        if (this.peer !== peer || generation !== this.generation || TERMINAL.includes(this.state)) return;
+        const connected = peer.connectionState === "connected" && (peer.iceConnectionState === "connected" || peer.iceConnectionState === "completed");
+        if (!connected) this.startIceRecovery(500);
+      }, ICE_RESTART_TIMEOUT_MS);
+    } catch {
+      this.iceRestartInFlight = false;
+      if (this.peer === peer && generation === this.generation && !TERMINAL.includes(this.state)) this.startIceRecovery(500);
+    }
+  }
+
+  private markIceRecovered(): void {
+    this.clearIceRestartTimer();
+    this.iceRestartInFlight = false;
+    if (this.recoveryStatus === "reconnecting") this.recoveryStatus = "recovered";
+    this.emit();
+  }
+
+  private exhaustIceRestarts(): void {
+    if (TERMINAL.includes(this.state)) return;
+    this.recoveryStatus = "failed";
+    this.fail(new Error("The audio connection could not be restored. Check your network and try again."));
+  }
+
+  private clearIceRestartTimer(): void {
+    if (this.iceRestartTimer !== undefined) window.clearTimeout(this.iceRestartTimer);
+    this.iceRestartTimer = undefined;
   }
 
   private async fetchTurnServers(): Promise<RTCIceServer[]> {
@@ -386,7 +529,14 @@ export class CallController {
     await new Promise<void>((resolve, reject) => {
       let settled = false;
       const timer = window.setTimeout(() => { socket.close(); if (!settled) { settled = true; reject(new Error("Signaling connection timed out.")); } }, 10_000);
-      socket.onopen = () => { window.clearTimeout(timer); settled = true; this.reconnectAttempts = 0; resolve(); };
+      socket.onopen = () => {
+        window.clearTimeout(timer);
+        settled = true;
+        this.reconnectAttempts = 0;
+        const peer = this.peer;
+        if (peer && (peer.iceConnectionState === "disconnected" || peer.iceConnectionState === "failed" || peer.connectionState === "disconnected" || peer.connectionState === "failed")) this.startIceRecovery(0);
+        resolve();
+      };
       socket.onerror = () => { window.clearTimeout(timer); if (!settled) { settled = true; reject(new Error("Signaling connection failed.")); } };
       socket.onclose = () => {
         window.clearTimeout(timer);
@@ -418,10 +568,12 @@ export class CallController {
     try { message = JSON.parse(raw) as Envelope; } catch { return; }
     if (message.type === "session-invalid") { this.invalidateSession(); return; }
     if (message.type === "call-state") {
-      const state = asState(message.status);
-      if (!state) return;
+      const serverState = asState(message.status);
+      if (!serverState) return;
+      const transportReady = this.peer && (this.peer.connectionState === "connected" || this.peer.iceConnectionState === "connected" || this.peer.iceConnectionState === "completed");
+      const state = serverState === "CONNECTED" && this.peer && !transportReady ? "CONNECTING" : serverState;
+      if (serverState === "FAILED" && this.recoveryStatus === "reconnecting") this.recoveryStatus = "failed";
       this.setState(state);
-      if (state === "CONNECTED" && !this.connectedAt) this.connectedAt = Date.now();
       if (TERMINAL.includes(state)) this.cleanup();
       return;
     }
@@ -506,6 +658,9 @@ export class CallController {
     this.role = null;
     this.connectedAt = 0;
     this.pendingCandidates = [];
+    this.iceRestartAttempts = 0;
+    this.recoveryStatus = "idle";
+    this.networkOnline = typeof navigator === "undefined" || navigator.onLine !== false;
     this.setState("IDLE");
   }
 
@@ -518,7 +673,7 @@ export class CallController {
   }
   private emit(): void { this.options.onChange?.(this.currentSnapshot()); }
   private currentSnapshot(): CallSnapshot {
-    return { id: this.id, state: this.state, role: this.role, durationMs: this.connectedAt ? Date.now() - this.connectedAt : 0, muted: this.muted, connectionState: this.peer?.connectionState ?? "new" };
+    return { id: this.id, state: this.state, role: this.role, durationMs: this.connectedAt ? Date.now() - this.connectedAt : 0, muted: this.muted, connectionState: this.peer?.connectionState ?? "new", networkOnline: this.networkOnline, recoveryStatus: this.recoveryStatus };
   }
   private invalidateSession(): void {
     if (this.sessionInvalid) return;
@@ -546,10 +701,19 @@ export class CallController {
   private cleanup(): void {
     if (this.reconnectTimer) window.clearTimeout(this.reconnectTimer);
     this.reconnectTimer = undefined;
+    this.clearIceRestartTimer();
+    this.iceRestartInFlight = false;
+    this.detachNetworkListeners();
     const socket = this.socket;
     this.socket = undefined;
     try { socket?.close(1000, "Call ended"); } catch { /* closed */ }
-    this.peer?.close();
+    if (this.peer) {
+      this.peer.onicecandidate = null;
+      this.peer.ontrack = null;
+      this.peer.onconnectionstatechange = null;
+      this.peer.oniceconnectionstatechange = null;
+      this.peer.close();
+    }
     this.peer = undefined;
     this.localStream?.getTracks().forEach((track) => track.stop());
     this.localStream = undefined;
@@ -560,6 +724,7 @@ export class CallController {
     this.durationTimer = undefined;
     this.connectedAt = 0;
     this.pendingCandidates = [];
+    if (this.state !== "FAILED") this.recoveryStatus = "idle";
   }
 
   private async requestServerCancellation(callId: string): Promise<void> {

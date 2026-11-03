@@ -7,7 +7,7 @@ const apiMock = vi.hoisted(() => vi.fn());
 const startOutgoing = vi.hoisted(() => vi.fn());
 const cancel = vi.hoisted(() => vi.fn());
 const session = vi.hoisted(() => ({
-  snapshot: { id: null as string | null, state: "IDLE" as string, role: null as "caller" | "callee" | null, durationMs: 0, muted: false, connectionState: "new" },
+  snapshot: { id: null as string | null, state: "IDLE" as string, role: null as "caller" | "callee" | null, durationMs: 0, muted: false, connectionState: "new", networkOnline: true, recoveryStatus: "idle" as "idle" | "reconnecting" | "recovered" | "failed" },
   controller: { startOutgoing, cancel, hangup: vi.fn(), toggleMute: vi.fn(), setAudioOutput: vi.fn() },
   preferencesReady: true,
   preferenceLoadError: false,
@@ -49,6 +49,7 @@ import DialerPage from "./DialerPage";
 
 afterEach(() => {
   document.body.innerHTML = "";
+  session.snapshot = { id: null, state: "IDLE", role: null, durationMs: 0, muted: false, connectionState: "new", networkOnline: true, recoveryStatus: "idle" };
   vi.clearAllMocks();
 });
 
@@ -89,5 +90,17 @@ describe("DialerPage outgoing cancellation", () => {
       releaseSetup();
       await setup;
     });
+  });
+
+  it("shows safe device network and ICE recovery diagnostics", () => {
+    session.snapshot = { ...session.snapshot, networkOnline: false, recoveryStatus: "reconnecting" };
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    act(() => root.render(<DialerPage />));
+
+    expect(host.textContent).toContain("status.networkStates.offline");
+    expect(host.textContent).toContain("status.recovery.reconnecting");
+    act(() => root.unmount());
   });
 });
