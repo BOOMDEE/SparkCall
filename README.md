@@ -38,8 +38,8 @@ The following local browser captures use synthetic demo data and show the checke
   **连接偏好：** `Auto` 优先 P2P 直连，必要时可回退到 TURN；`P2P-only` 不请求 TURN 凭据；`TURN-only` 必须通过中继。更改只对下一通生效。
 - **Call records:** private by default; explicit public/revoked state, expiry, and public pages that omit internal identifiers and use `noindex, nofollow`. The app does not record call audio.<br>
   **通话记录：** 默认私有；需显式公开，可撤销和设定过期；公开页不返回内部标识并设置 `noindex, nofollow`。应用不录制通话音频。
-- **Administration:** server-side allowlisted administrator access, site branding, usage privacy controls, temporary-account policy, per-account and bulk TURN limits, pseudonymous configuration export, password reset, and audit entries.<br>
-  **管理员功能：** 服务端 allowlist 鉴权、全站品牌、用量隐私、临时账号策略、逐用户/批量 TURN 限额、假名化配置导出、密码重设及审计记录。
+- **Administration:** server-side allowlisted administrator access, site branding, usage privacy controls, temporary-account policy, a deployment-wide 800 GB/month TURN egress cap, per-account and bulk limits, pseudonymous configuration export, password reset, and audit entries.<br>
+  **管理员功能：** 服务端 allowlist 鉴权、全站品牌、用量隐私、临时账号策略、部署级每月 800 GB TURN egress 上限、逐用户/批量限额、假名化配置导出、密码重设及审计记录。
 
 ## Admin configuration and usage / 管理配置与用量
 
@@ -55,14 +55,16 @@ A separate shared admin password is not used. Admins sign in with their normal S
 
 ### Usage privacy and quota behavior / 用量隐私与限额行为
 
-- Cloudflare account-level TURN totals are **admin-only**. `TURN_ANALYTICS_API_TOKEN` is a Worker Secret and is never returned to or bundled for the browser. Basic call setup does not need it, but admin usage analytics and sampled TURN limit checks do. Use an existing token with only read-only **Account Analytics** access for Realtime GraphQL; do not grant TURN key management or write permissions for analytics.<br>
-  Cloudflare 账号级 TURN 总用量**仅管理员可见**。`TURN_ANALYTICS_API_TOKEN` 是 Worker Secret，不会返回或打包到浏览器。基本通话不依赖它，但管理员用量分析与采样 TURN 限额检查需要它。只使用已有且仅授予 Realtime GraphQL **Account Analytics 只读**权限的 token；不要授予 TURN key 管理或用量写权限。
+- TURN usage totals are **admin-only** and filtered by the Worker’s configured `TURN_KEY_ID`, so other TURN keys on the same Cloudflare account are excluded. `TURN_ANALYTICS_API_TOKEN` is a Worker Secret and is never returned to or bundled for the browser. It needs only read-only **Account Analytics** access for Realtime GraphQL; it does not need TURN key management or write permissions. Other projects sharing the same TURN key cannot be distinguished.<br>
+  TURN 用量**仅管理员可见**，并按 Worker 配置的 `TURN_KEY_ID` 过滤，因此不会计入同一 Cloudflare 账号中的其他 TURN key。`TURN_ANALYTICS_API_TOKEN` 是 Worker Secret，不会返回或打包到浏览器；只需 Realtime GraphQL **Account Analytics 只读**权限，不需要 TURN key 管理或写权限。若其他项目共用同一个 TURN key，则无法彼此区分。
 - Public usage is disabled by default. If an administrator enables it, ordinary users can see only an app-level aggregate computed from SparkCall usage snapshots, and only after the configured anonymous-user threshold is met (default: 5). This is not a Cloudflare account total.<br>
   默认不公开用量。管理员启用后，普通用户只能看到由 SparkCall 用量快照聚合的应用级数据，且达到匿名人数门槛后才会显示（默认 5 人）；这不是 Cloudflare 账号总量。
 - Each user sees their own usage. Admin platform totals and user-level records are protected by server-side authorization; individual account details are not exposed through the public aggregate.<br>
   普通用户只看到自己的用量。平台总量和逐用户数据受服务端权限保护；公开聚合不暴露单个账号明细。
 - `monthlyUserQuotaBytes` and `monthlyTurnQuotaBytes` are **display quotas only**. The temporary-account `monthlyAggregateBudgetBytes` is a display-only group budget. They do not block calls. `TURN_MONTHLY_QUOTA_BYTES` is also a display fallback, not a hard cap.<br>
   `monthlyUserQuotaBytes` 与 `monthlyTurnQuotaBytes` **仅用于展示**；临时账号的 `monthlyAggregateBudgetBytes` 是仅展示的群组预算，不会阻止通话。`TURN_MONTHLY_QUOTA_BYTES` 也只是展示回退值，不是硬上限。
+- `TURN_PLATFORM_MONTHLY_LIMIT_BYTES` is a separate deployment-wide limit. This deployment sets it to `800000000000` bytes (800 decimal GB per UTC calendar month) and measures egress for the configured TURN key only. If Analytics is missing or unavailable, enforcement fails open; a sampled threshold blocks only new TURN credentials, P2P direct traffic is excluded, and active calls continue. Analytics lag can cause overshoot; changing TURN keys mid-month means usage on the previous key is not included unless separately tracked.<br>
+  `TURN_PLATFORM_MONTHLY_LIMIT_BYTES` 是独立的部署级总限额。本部署设为 `800000000000` bytes（每 UTC 自然月 800 十进制 GB），并且只统计当前配置 TURN key 的 egress。Analytics 缺失或不可用时会 fail-open；采样达到阈值后只拒绝新的 TURN 凭据，P2P 直连不计入，现有通话继续。采样延迟可能造成超额；若月中更换 TURN key，旧 key 当月用量不会自动并入，除非另行跟踪。
 - `monthlyTurnLimitBytes` and per-user overrides are optional **monthly TURN-egress limits**. Blank/`null` inherits the configured default; `0` means unlimited. The default is `null` (no enforcement). Values entered in the admin UI are decimal GB and are stored as bytes.<br>
   `monthlyTurnLimitBytes` 和逐用户覆盖值是可选的**月度 TURN egress 限额**。留空/`null` 表示继承默认配置；`0` 表示不限额。默认值为 `null`（不执行限制）。管理员界面输入十进制 GB，存储为 bytes。
 - The limit is based on Cloudflare TURN egress usage attributed to a user's custom identifier in sampled analytics and SparkCall snapshots. When the latest available monthly estimate reaches an enabled limit, only a **new TURN credential allocation** is refused with an explicit response. Existing calls continue. Auto mode can still try direct P2P; TURN-only mode cannot relay after the limit is reached. Since snapshots and provider analytics can lag, usage can overshoot; this is not a real-time total-call cap or billing guarantee.<br>

@@ -29,6 +29,25 @@ export interface TurnUsage {
   note: string;
 }
 
+export interface PlatformTurnLimitStatus {
+  available: boolean;
+  month: string;
+  usedBytes: number | null;
+  limitBytes: number | null;
+  limitConfigured: boolean;
+  reached: boolean;
+  lastUpdated: string | null;
+}
+
+interface PlatformUsageCacheEntry {
+  usedBytes: number | null;
+  lastUpdated: string | null;
+  cachedAt: number;
+}
+
+const platformUsageCache = new Map<string, PlatformUsageCacheEntry>();
+const platformUsageInFlight = new Map<string, Promise<PlatformUsageCacheEntry>>();
+
 function currentMonthRange() {
   const end = new Date();
   return {
@@ -41,6 +60,37 @@ function currentMonthRange() {
 function configuredQuota(env: Env): number | null {
   const value = Number(env.TURN_MONTHLY_QUOTA_BYTES);
   return Number.isSafeInteger(value) && value > 0 ? value : null;
+}
+
+function configuredPlatformLimit(env: Env): number | null {
+  const value = Number(env.TURN_PLATFORM_MONTHLY_LIMIT_BYTES);
+  return Number.isSafeInteger(value) && value > 0 ? value : null;
+}
+
+async function cachedPlatformUsage(env: Env, month: string): Promise<PlatformUsageCacheEntry> {
+  if (!env.CLOUDFLARE_ACCOUNT_ID || !env.TURN_KEY_ID || !env.TURN_ANALYTICS_API_TOKEN) {
+    return { usedBytes: null, lastUpdated: null, cachedAt: Date.now() };
+  }
+  const key = `${env.CLOUDFLARE_ACCOUNT_ID}:${env.TURN_KEY_ID}:${month}`;
+  const cached = platformUsageCache.get(key);
+  const ttlMs = cached?.usedBytes === null ? 5_000 : 30_000;
+  if (cached && Date.now() - cached.cachedAt < ttlMs) return cached;
+  const inFlight = platformUsageInFlight.get(key);
+  if (inFlight) return inFlight;
+
+  const request = queryEgress(env)
+    .then((usedBytes) => ({ usedBytes, lastUpdated: now(), cachedAt: Date.now() }))
+    .catch((cause: unknown) => {
+      console.error("turn_analytics_platform_query_failed", cause instanceof Error ? cause.message : "unknown");
+      return { usedBytes: null, lastUpdated: null, cachedAt: Date.now() };
+    })
+    .then((entry) => {
+      platformUsageCache.set(key, entry);
+      return entry;
+    })
+    .finally(() => platformUsageInFlight.delete(key));
+  platformUsageInFlight.set(key, request);
+  return request;
 }
 
 function makeUsage(month: string, usedBytes: number | null, quotaBytes: number | null, lastUpdated: string | null, source: TurnUsage["source"]): TurnUsage {
@@ -59,15 +109,15 @@ function makeUsage(month: string, usedBytes: number | null, quotaBytes: number |
 }
 
 async function queryEgress(env: Env, customIdentifier?: string): Promise<number> {
-  if (!env.CLOUDFLARE_ACCOUNT_ID || !env.TURN_ANALYTICS_API_TOKEN) throw new Error("TURN analytics is not configured");
+  if (!env.CLOUDFLARE_ACCOUNT_ID || !env.TURN_KEY_ID || !env.TURN_ANALYTICS_API_TOKEN) throw new Error("TURN analytics is not configured for this TURN key");
   const { start, end } = currentMonthRange();
   const account = JSON.stringify(env.CLOUDFLARE_ACCOUNT_ID);
   const startArg = JSON.stringify(start);
   const endArg = JSON.stringify(end);
-  const identityFilter = customIdentifier ? `, customIdentifier: ${JSON.stringify(customIdentifier)}` : "";
+  const identityFilter = `, keyId: ${JSON.stringify(env.TURN_KEY_ID)}${customIdentifier ? `, customIdentifier: ${JSON.stringify(customIdentifier)}` : ""}`;
   const grouping = customIdentifier
     ? `limit: 1\n          filter: { date_geq: ${startArg}, date_leq: ${endArg}${identityFilter} }\n          orderBy: [customIdentifier_ASC]`
-    : `limit: 10000\n          filter: { date_geq: ${startArg}, date_leq: ${endArg} }\n          orderBy: [datetimeFiveMinutes_ASC]`;
+    : `limit: 10000\n          filter: { date_geq: ${startArg}, date_leq: ${endArg}${identityFilter} }\n          orderBy: [datetimeFiveMinutes_ASC]`;
   const dimensions = customIdentifier ? "dimensions { customIdentifier }" : "dimensions { datetimeFiveMinutes }";
   const query = `query SparkCallTurnUsage {
     viewer {
@@ -79,16 +129,32 @@ async function queryEgress(env: Env, customIdentifier?: string): Promise<number>
       }
     }
   }`;
-  const response = await fetch("https://api.cloudflare.com/client/v4/graphql", {
-    method: "POST",
-    headers: { authorization: `Bearer ${env.TURN_ANALYTICS_API_TOKEN}`, "content-type": "application/json" },
-    body: JSON.stringify({ query }),
-  });
-  if (!response.ok) throw new Error(`Cloudflare TURN analytics returned ${response.status}`);
-  const payload = await response.json() as TurnAnalyticsResponse;
-  if (payload.errors?.length) throw new Error("Cloudflare TURN analytics query failed");
-  const rows = payload.data?.viewer?.accounts?.[0]?.callsTurnUsageAdaptiveGroups ?? [];
-  return rows.reduce((total, row) => total + (Number.isFinite(row.sum?.egressBytes) ? Math.max(0, Number(row.sum?.egressBytes)) : 0), 0);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 4_000);
+  let payload: TurnAnalyticsResponse;
+  try {
+    const response = await fetch("https://api.cloudflare.com/client/v4/graphql", {
+      method: "POST",
+      headers: { authorization: `Bearer ${env.TURN_ANALYTICS_API_TOKEN}`, "content-type": "application/json" },
+      body: JSON.stringify({ query }),
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error(`Cloudflare TURN analytics returned ${response.status}`);
+    payload = await response.json() as TurnAnalyticsResponse;
+  } finally {
+    clearTimeout(timeout);
+  }
+  if (!payload || payload.errors?.length) throw new Error("Cloudflare TURN analytics query failed");
+  const rows = payload.data?.viewer?.accounts?.[0]?.callsTurnUsageAdaptiveGroups;
+  if (!Array.isArray(rows)) throw new Error("Cloudflare TURN analytics dataset is unavailable");
+  let total = 0;
+  for (const row of rows) {
+    const bytes = row?.sum?.egressBytes;
+    if (typeof bytes !== "number" || !Number.isFinite(bytes) || bytes < 0) throw new Error("Cloudflare TURN analytics metric is invalid");
+    total += bytes;
+  }
+  if (!Number.isFinite(total)) throw new Error("Cloudflare TURN analytics total is invalid");
+  return total;
 }
 
 async function readSnapshot(env: Env, userId: string, month: string, quotaOverride?: number | null): Promise<TurnUsage | null> {
@@ -102,7 +168,7 @@ async function readSnapshot(env: Env, userId: string, month: string, quotaOverri
 export async function getUserTurnUsage(env: Env, userId: string, quotaOverride?: number | null): Promise<TurnUsage> {
   const { month } = currentMonthRange();
   const quota = quotaOverride === undefined ? configuredQuota(env) : quotaOverride;
-  if (!env.CLOUDFLARE_ACCOUNT_ID || !env.TURN_ANALYTICS_API_TOKEN) {
+  if (!env.CLOUDFLARE_ACCOUNT_ID || !env.TURN_KEY_ID || !env.TURN_ANALYTICS_API_TOKEN) {
     return await readSnapshot(env, userId, month, quota) ?? makeUsage(month, null, quota, null, "unavailable");
   }
   try {
@@ -121,12 +187,42 @@ export async function getUserTurnUsage(env: Env, userId: string, quotaOverride?:
   }
 }
 
-/** Admin-only Cloudflare-account total retained for the existing administrator view. */
+/** Uses only the configured SparkCall TURN key's egress aggregate for a sampled cap. */
+export async function getPlatformTurnLimitStatus(env: Env): Promise<PlatformTurnLimitStatus> {
+  const { month } = currentMonthRange();
+  const limitBytes = configuredPlatformLimit(env);
+  if (limitBytes === null) return { available: false, month, usedBytes: null, limitBytes: null, limitConfigured: false, reached: false, lastUpdated: null };
+  const sample = await cachedPlatformUsage(env, month);
+  return {
+    available: sample.usedBytes !== null,
+    month,
+    usedBytes: sample.usedBytes,
+    limitBytes,
+    limitConfigured: true,
+    reached: sample.usedBytes !== null && sample.usedBytes >= limitBytes,
+    lastUpdated: sample.lastUpdated,
+  };
+}
+
+/** Admin-only total for the configured SparkCall TURN key and its platform cap. */
 export async function getPlatformTurnUsage(env: Env) {
   const { month } = currentMonthRange();
-  if (!env.CLOUDFLARE_ACCOUNT_ID || !env.TURN_ANALYTICS_API_TOKEN) return { available: false, month, usedBytes: null, lastUpdated: null, source: "unavailable", authoritative: false };
-  const usedBytes = await queryEgress(env);
-  return { available: true, month, usedBytes, lastUpdated: now(), source: "cloudflare-realtime-analytics", authoritative: false };
+  const limitBytes = configuredPlatformLimit(env);
+  const sample = await cachedPlatformUsage(env, month);
+  const available = sample.usedBytes !== null;
+  return {
+    available,
+    month,
+    usedBytes: sample.usedBytes,
+    quotaBytes: limitBytes,
+    remainingBytes: !available || limitBytes === null ? null : Math.max(0, limitBytes - sample.usedBytes!),
+    percentageUsed: !available || limitBytes === null ? null : Math.min(100, (sample.usedBytes! / limitBytes) * 100),
+    limitConfigured: limitBytes !== null,
+    enforcementAvailable: limitBytes !== null && available,
+    lastUpdated: sample.lastUpdated,
+    source: available ? "cloudflare-realtime-analytics" : "unavailable",
+    authoritative: false,
+  };
 }
 
 const AGGREGATE_NOTE = "SparkCall-only aggregate of sampled TURN relay egress snapshots; successful P2P direct traffic is not counted. No account-wide or per-user data is exposed. Estimates may be incomplete and are not real-time billing data.";
@@ -172,7 +268,7 @@ export async function getTemporaryTurnUsage(env: Env, monthlyBudgetBytes: number
 
 /** Hourly best-effort snapshots, rotating through at most 25 active users per run. */
 export async function snapshotActiveUserUsage(env: Env): Promise<void> {
-  if (!env.CLOUDFLARE_ACCOUNT_ID || !env.TURN_ANALYTICS_API_TOKEN) return;
+  if (!env.CLOUDFLARE_ACCOUNT_ID || !env.TURN_KEY_ID || !env.TURN_ANALYTICS_API_TOKEN) return;
   const configuration = await getSiteConfiguration(env);
   const cursor = await env.DB.prepare("SELECT last_user_id FROM turn_snapshot_cursor WHERE id=1").first<{ last_user_id: string | null }>();
   let rows = await env.DB.prepare(`

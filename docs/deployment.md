@@ -17,12 +17,12 @@
    - `TURN_KEY_ID`：Cloudflare Realtime TURN key 的 UID。
    - `TURN_API_TOKEN`：TURN key 创建后返回的一次性 key；仅保存在 Worker secret 中。
    - `SPARKCALL_WEBHOOK_ENCRYPTION_KEY`：用于加密 incoming-call webhook URL 的 32-byte 随机密钥，以 Base64 文本保存（可用 `openssl rand -base64 32` 生成）。
-   - `TURN_ANALYTICS_API_TOKEN`：管理员 Cloudflare 用量与 TURN 限额检查所需的 Cloudflare API token；只使用已有且仅授予 **Account Analytics Read** 的 token，不要扩大权限。
-3. 设置非敏感 Worker variables：`CLOUDFLARE_ACCOUNT_ID`、`ADMIN_USER_IDS`、`TURN_MONTHLY_QUOTA_BYTES`，以及可选的 `SESSION_TTL_SECONDS` 和 `TEMP_SESSION_TTL_SECONDS`。`ADMIN_USER_IDS` 是逗号分隔的 SparkCall 内部 user ID；未配置或未匹配时，所有管理员接口 fail-closed。
+   - `TURN_ANALYTICS_API_TOKEN`：管理员 Cloudflare 用量与 TURN 限额检查所需的 Cloudflare API token；仅授予目标账号 **Account Analytics Read**，Analytics 查询按 `TURN_KEY_ID` 过滤，不要扩大权限。
+3. 设置非敏感 Worker variables：`CLOUDFLARE_ACCOUNT_ID`、`ADMIN_USER_IDS`、`TURN_MONTHLY_QUOTA_BYTES` 和 `TURN_PLATFORM_MONTHLY_LIMIT_BYTES`，以及可选的 `SESSION_TTL_SECONDS` 和 `TEMP_SESSION_TTL_SECONDS`。本部署的 `TURN_PLATFORM_MONTHLY_LIMIT_BYTES` 为 `800000000000`（800 十进制 GB/UTC 自然月）。`ADMIN_USER_IDS` 是逗号分隔的 SparkCall 内部 user ID；未配置或未匹配时，所有管理员接口 fail-closed。
 4. 在 GitHub Actions repository variables 中设置非敏感的 `D1_DATABASE_ID`、`SPARKCALL_HOSTNAME` 与 `ADMIN_USER_IDS`。正常发布要求 `ADMIN_USER_IDS`；仅一次性注册 bootstrap 可暂时留空。手动部署工作流会在临时 runner 中替换安全占位值；这些值不应写进 Git。
 5. `deploy.yml` 从 `CLOUDFLARE_ACCOUNT_ID` Actions secret 及 `ADMIN_USER_IDS` repository variable 注入非秘密 Worker variables；同一 account ID 也用于部署定位。仅当项目所有者批准并手动 dispatch `api-token` 模式时，才配置最小权限 `CLOUDFLARE_API_TOKEN` Actions secret；不要把 token 写入 YAML。
 
-TURN Analytics token 与 TURN key 是不同凭据。未配置 Analytics token 时，通话服务仍可签发 TURN credentials，但 Cloudflare 账号级用量不可用；若配置了 TURN 执行限额，缺少可用采样时会 fail-open，仍允许新凭据并可能超额。正常发布预检要求该 Worker Secret 已存在；下面记录的一次性注册 bootstrap 是唯一例外。
+TURN Analytics token 与 TURN key 是不同凭据。未配置 Analytics token 或 TURN key ID 时，通话服务仍可签发 TURN credentials，但项目级用量不可用；若配置了 TURN 执行限额，缺少可用采样时会 fail-open，仍允许新凭据并可能超额。平台总限额只过滤当前配置的 `TURN_KEY_ID`，不计同账号其他 TURN key；若其他应用共用此 key，其流量会一并计入。正常发布预检要求 Analytics Worker Secret 已存在；下面记录的一次性注册 bootstrap 是唯一例外。
 
 ## 一次性注册 bootstrap
 
@@ -76,7 +76,7 @@ npx wrangler deploy
 2. 创建两个测试账号，在真实设备上验证自定义号码、联系人、黑名单、接听/拒接/取消及通话结束。
 3. 通过不同网络（尤其蜂窝网与 NAT 后网络）验证 TURN fallback；只在 Worker secret 已正确设置后测试。
 4. 检查通话记录默认私有、显式公开/撤销、过期和临时账号 capability cookie；不要用真实敏感内容做公开测试。
-5. 在 Cloudflare Worker 日志确认无 secret 或 session token 输出。TURN Analytics 数据是估算值，不应视为账单最终值；TURN 费用按 Cloudflare Realtime 的实际计费规则（包括中继 egress 等适用项目）产生，`TURN_MONTHLY_QUOTA_BYTES` 仅是界面展示配额，不是硬性消费上限或自动阻断器。
+5. 在 Cloudflare Worker 日志确认无 secret 或 session token 输出。TURN Analytics 数据是估算值，不应视为账单最终值；TURN 费用按 Cloudflare Realtime 的实际计费规则（包括中继 egress 等适用项目）产生。`TURN_MONTHLY_QUOTA_BYTES` 仅用于界面展示；`TURN_PLATFORM_MONTHLY_LIMIT_BYTES` 按当前 TURN key 的 egress 样本阻止后续新 TURN 凭据分配，但会因 Analytics 延迟而超额，Analytics 不可用时 fail-open，且不会中断现有通话；成功 P2P 直连不计入。
 
 ## 回滚与数据库
 

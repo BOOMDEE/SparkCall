@@ -1,7 +1,7 @@
 import type { Env } from "./env";
 import { authenticate, clearSessionCookie, createSession, hashPassword, hashToken, newToken, requireAuth, revokeSession, sessionCookie, verifyPassword, rateLimit } from "./auth";
 import { body, error, findByNumber, findUser, id, json, now, publicUser, text, validDialNumber, validNumber, validSlug, validUsername } from "./database";
-import { getPlatformTurnUsage, getPublicTurnUsage, getTemporaryTurnUsage, getUserTurnUsage } from "./turn";
+import { getPlatformTurnLimitStatus, getPlatformTurnUsage, getPublicTurnUsage, getTemporaryTurnUsage, getUserTurnUsage } from "./turn";
 import { getSiteConfiguration, getUserTurnPolicy, publicSiteConfiguration, temporaryAggregateBudgetBytes, validateAdminConfigurationPatch } from "./configuration";
 import { saveWebhook, validateResolvedHost, validateWebhookUrl, webhookConfigured } from "./webhook";
 
@@ -753,6 +753,11 @@ async function route(request: Request, env: Env): Promise<Response> {
   }
   if (path === "/api/turn/credentials" && method === "GET") {
     const user = await requireAuth(request, env);
+    if (!env.TURN_KEY_ID || !env.TURN_API_TOKEN) return error("TURN is not configured", 503, "TURN_UNAVAILABLE");
+    const platformLimit = await getPlatformTurnLimitStatus(env);
+    if (platformLimit.reached) {
+      return json({ iceServers: [], relayUnavailable: true, reason: "platform_monthly_turn_limit_reached", limitBytes: platformLimit.limitBytes });
+    }
     const configuration = await getSiteConfiguration(env);
     const policy = await getUserTurnPolicy(env, configuration, user.id, !!user.is_temporary);
     if (policy.limitBytes !== null) {
@@ -761,7 +766,6 @@ async function route(request: Request, env: Env): Promise<Response> {
         return json({ iceServers: [], relayUnavailable: true, reason: "monthly_turn_limit_reached", limitBytes: policy.limitBytes });
       }
     }
-    if (!env.TURN_KEY_ID || !env.TURN_API_TOKEN) return error("TURN is not configured", 503, "TURN_UNAVAILABLE");
     const ttl = Math.max(60, Math.min(86_400, Number(env.TURN_CREDENTIAL_TTL_SECONDS) || 3600));
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), TURN_PROVIDER_TIMEOUT_MS);

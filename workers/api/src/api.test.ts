@@ -1,5 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { handleApi } from "./api";
+
+afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 const user = { id: "user-1", display_name: "Caller", is_temporary: 0, expires_at: null, session_id: "session-1" };
 const cookie = "sc_session=test-session";
@@ -95,6 +97,53 @@ describe("API preference and TURN regressions", () => {
     expect(malformed).toMatchObject({ status: 502, body: { error: { code: "TURN_INVALID_RESPONSE" } } });
     expect(oversized).toMatchObject({ status: 502, body: { error: { code: "TURN_INVALID_RESPONSE" } } });
     expect(fetchMock.mock.calls[0]?.[1]).not.toMatchObject({ body: expect.stringContaining("provider-secret") });
+    vi.unstubAllGlobals();
+  });
+
+  it("blocks only new TURN credentials when this deployment key reaches its platform monthly limit", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      data: { viewer: { accounts: [{ callsTurnUsageAdaptiveGroups: [{ dimensions: { datetimeFiveMinutes: "2026-11-06T10:00:00Z" }, sum: { egressBytes: 800_000_000_000 } }] }] } },
+    }), { status: 200, headers: { "content-type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    const env = {
+      ...preferenceEnv(),
+      CLOUDFLARE_ACCOUNT_ID: "platform-limit-account",
+      TURN_KEY_ID: "sparkcall-turn-key",
+      TURN_API_TOKEN: "provider-secret",
+      TURN_ANALYTICS_API_TOKEN: "analytics-secret",
+      TURN_PLATFORM_MONTHLY_LIMIT_BYTES: "800000000000",
+    };
+
+    const result = await jsonResponse(await handleApi(request("/api/turn/credentials"), env));
+    expect(result).toMatchObject({
+      status: 200,
+      body: { iceServers: [], relayUnavailable: true, reason: "platform_monthly_turn_limit_reached", limitBytes: 800_000_000_000 },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const analyticsRequest = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as { query: string };
+    expect(analyticsRequest.query).toContain('keyId: "sparkcall-turn-key"');
+    expect(JSON.stringify(result.body)).not.toContain("analytics-secret");
+    vi.unstubAllGlobals();
+  });
+
+  it("fails open when the project-scoped Analytics query errors and still returns TURN credentials", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response("unavailable", { status: 503 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ iceServers: [{ urls: "turn:relay.example.test" }] }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const env = {
+      ...preferenceEnv(),
+      CLOUDFLARE_ACCOUNT_ID: "platform-fail-open-account",
+      TURN_KEY_ID: "sparkcall-turn-key-fail-open",
+      TURN_API_TOKEN: "provider-secret",
+      TURN_ANALYTICS_API_TOKEN: "analytics-secret",
+      TURN_PLATFORM_MONTHLY_LIMIT_BYTES: "800000000000",
+    };
+
+    const result = await jsonResponse(await handleApi(request("/api/turn/credentials"), env));
+    expect(result).toMatchObject({ status: 200, body: { relayUnavailable: false, iceServers: [{ urls: "turn:relay.example.test" }] } });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     vi.unstubAllGlobals();
   });
 

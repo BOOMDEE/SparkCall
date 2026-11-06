@@ -47,7 +47,7 @@ sequenceDiagram
 
 ## TURN 用量
 
-Worker 使用 Cloudflare Realtime 官方 GraphQL Analytics 查询 `egressBytes`，并以 `customIdentifier` 区分用户。定时任务每小时轮转最多 25 个活动用户并将估算快照写入 D1。采样数据可能延迟或不完整，因此接口标记 `authoritative: false`。TURN 费用按 Cloudflare Realtime 的适用计费规则（包括适用的中继 egress）产生；`TURN_MONTHLY_QUOTA_BYTES` 只是展示配额，不是实时流量闸门或硬性消费上限。分析 API token 仅存在于 Worker secret，不会返回浏览器。
+Worker 使用 Cloudflare Realtime 官方 GraphQL Analytics 查询 `egressBytes`，并按配置的 `TURN_KEY_ID` 限定在当前 SparkCall TURN key；逐用户分析再以 `customIdentifier` 区分用户。定时任务每小时轮转最多 25 个活动用户并将估算快照写入 D1。独立的 `TURN_PLATFORM_MONTHLY_LIMIT_BYTES` 为当前 TURN key 设定部署级月度阈值；采样达到阈值后仅拒绝新 TURN 凭据，成功 P2P 不计入，Analytics 缺失或不可用时 fail-open。采样数据可能延迟或不完整，因此接口标记 `authoritative: false`，也不能视为实时消费硬上限。`TURN_MONTHLY_QUOTA_BYTES` 仍只是展示配额。分析 API token 仅存在于 Worker secret，不会返回浏览器。
 
 ## 计划取舍与限制
 

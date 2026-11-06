@@ -38,6 +38,7 @@ export interface Env {
   TURN_ANALYTICS_API_TOKEN?: string;
   CLOUDFLARE_ACCOUNT_ID?: string;
   TURN_MONTHLY_QUOTA_BYTES?: string;
+  TURN_PLATFORM_MONTHLY_LIMIT_BYTES?: string;
   INTERNAL_SIGNALING_TOKEN?: string;
   ADMIN_USER_IDS?: string;
   ALLOWED_ORIGIN?: string;

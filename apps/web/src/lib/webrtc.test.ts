@@ -187,7 +187,7 @@ describe("CallController connection mode", () => {
 
   it("keeps Auto calls on a P2P attempt when the TURN limit blocks relay credentials", async () => {
     installWebRtcMocks(vi.fn().mockResolvedValue(new FakeStream(new FakeTrack("audio"))));
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ iceServers: [], relayUnavailable: true, reason: "monthly_turn_limit_reached" }), { status: 200 })));
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ iceServers: [], relayUnavailable: true, reason: "platform_monthly_turn_limit_reached" }), { status: 200 })));
     const controller = createController();
     await controller.startOutgoing("call-auto-limit", "callee");
     expect(FakePeer.configs[0]).toMatchObject({ iceServers: [], iceTransportPolicy: "all" });
