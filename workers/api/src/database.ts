@@ -51,6 +51,11 @@ export async function findByNumber(db: D1Database, number: string) {
     .bind(number).first<any>();
 }
 
+export async function findByUsername(db: D1Database, username: string) {
+  return db.prepare("SELECT id, username, display_name, number, is_temporary, expires_at FROM users WHERE username=?1 COLLATE NOCASE")
+    .bind(username).first<any>();
+}
+
 export async function isBlocked(db: D1Database, blockerId: string, blockedId: string) {
   return !!(await db.prepare("SELECT 1 FROM blocked_users WHERE user_id=?1 AND blocked_user_id=?2")
     .bind(blockerId, blockedId).first());

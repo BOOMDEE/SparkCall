@@ -33,7 +33,8 @@
     "privacySave": "无法保存隐私偏好。{{code}}",
     "usage": "无法加载用量数据。{{code}}",
     "appearanceSave": "无法保存外观偏好。{{code}}",
-    "webhook": "无法加载或保存 Webhook。{{code}}"
+    "webhook": "无法加载或保存 Webhook。{{code}}",
+    "quotaSave": "无法保存 TURN 限额。{{code}}"
   },
   "account": {
     "title": "账号与身份",
@@ -105,9 +106,12 @@
     "title": "TURN 用量",
     "detail": "来自 Cloudflare Realtime 分析的月度中继用量。采样分析可能不等于最终计费数据。",
     "unavailable": "用量报告尚未配置，或分析服务没有返回数据。配置 TURN 凭据后，通话仍可正常工作。",
+    "temporaryNote": "临时账号按内部账号 ID 统计；管理员列表每小时轮转采样最多 25 个活跃账号，新账号可能暂时没有快照。账号到期清理后，其历史快照也会删除。平台总量仅管理员可见。",
     "unavailableValue": "不可用",
     "monthly": "月度用量",
-    "quota": "配额",
+    "quota": "月度限额",
+    "referenceQuota": "参考额度（未强制）",
+    "referenceNote": "全局参考额度仅供展示；只有管理员设置的每用户限额会暂停新 TURN 凭证。",
     "remaining": "剩余",
     "quotaUsed": "配额使用率",
     "month": "月份",
@@ -118,9 +122,25 @@
     "estimated": "估算 / 采样",
     "platformTitle": "平台总量 · 已授权管理员",
     "egress": "TURN 外发流量",
-    "platformDetail": "汇总值为采样估算，并非权威计费总额。",
+    "platformDetail": "汇总值为整个 Cloudflare 账号的 TURN 采样估算，并非权威计费总额；它与当前用户的用量状态无关。分析不可用时会显示为不可用。",
     "sources": { "cloudflare-realtime-analytics": "Cloudflare Realtime Analytics", "cached-snapshot": "缓存快照", "unavailable": "不可用", "unknown": "未知" },
     "notes": { "Cloudflare Realtime Analytics is sampled and time-windowed; this dashboard is an estimate, not exact real-time billing data. TURN billing measures egress bytes.": "Cloudflare Realtime Analytics 使用采样并按时间窗口统计；此面板是估算值，不是精确的实时计费数据。TURN 计费按外发字节计算。" }
+  },
+  "quotas": {
+    "title": "用户 TURN 月度限额",
+    "detail": "管理员可按用户设置限额，或批量覆盖所有账号。限额单位为十进制 GB；留空表示该用户不设限额。用户用量来自每小时轮转快照（每轮最多 25 个活跃账号）；临时账号可能在采样前过期，清理后历史快照也会删除。",
+    "defaultReference": "当前全局参考额度：{{value}}（仅展示，不强制）。",
+    "bulkLimit": "批量月度限额（GB）",
+    "applyAll": "应用到所有账号",
+    "bulkDetail": "输入正数可批量设置限额；输入 0 会清除所有账号的单独限额。",
+    "search": "搜索账号",
+    "temporary": "临时",
+    "usage": "本月估算",
+    "userLimit": "用户限额（GB）",
+    "noLimit": "未设置",
+    "userSaved": "已为 {{name}} 保存限额。",
+    "bulkSaved": "已更新所有账号的限额。",
+    "noUsers": "没有匹配的账号。"
   },
   "webhook": {
     "title": "来电 Webhook",

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const requireAuth = vi.fn();
 const rateLimit = vi.fn();
 const findByNumber = vi.fn();
+const findByUsername = vi.fn();
 const isBlocked = vi.fn();
 
 vi.mock("./auth", () => ({ requireAuth, rateLimit }));
@@ -11,11 +12,13 @@ vi.mock("./database", () => ({
   error: (message: string, status = 400, code = "BAD_REQUEST") =>
     new Response(JSON.stringify({ error: { code, message } }), { status }),
   findByNumber,
+  findByUsername,
   id: () => "call-12345678",
   isBlocked,
   json: (value: unknown, status = 200) => new Response(JSON.stringify(value), { status }),
   now: () => "2026-11-02T10:00:00.000Z",
-  validDialNumber: () => true,
+  validDialNumber: (value: string) => /^[A-Za-z0-9]{1,32}$/.test(value) || /^SC-TMP-[A-F0-9]{10}$/.test(value),
+  validUsername: (value: string) => /^[A-Za-z0-9_][A-Za-z0-9_.-]{2,31}$/.test(value),
 }));
 
 const { handleRealtimeApi } = await import("./calls");
@@ -45,6 +48,7 @@ beforeEach(() => {
   rateLimit.mockReset().mockResolvedValue(true);
   requireAuth.mockResolvedValue({ id: "caller", number: "SC-CALLER", display_name: "Caller", session_id: "session" });
   findByNumber.mockResolvedValue({ id: "callee", number: "SC-CALLEE", display_name: "Callee" });
+  findByUsername.mockResolvedValue(null);
   isBlocked.mockResolvedValue(false);
 });
 
@@ -105,13 +109,35 @@ describe("realtime call authorization and activity checks", () => {
     const response = await handleRealtimeApi(new Request("https://app.example/api/calls", {
       method: "POST",
       headers: { Origin: "https://app.example", "Content-Type": "application/json" },
-      body: JSON.stringify({ number: "SC-CALLEE" }),
+      body: JSON.stringify({ number: "SC888" }),
     }), env(db, presence));
 
     expect(response?.status).toBe(201);
     const activityQuery = statements.find((query) => query.includes("FROM call_history") && query.includes("LIMIT 1"));
     expect(activityQuery).toContain("julianday(started_at)>julianday('now','-2 minutes')");
     expect(activityQuery).not.toContain("started_at>datetime('now','-2 minutes')");
+  });
+
+  it("resolves a username when no exact SparkCall number matches", async () => {
+    findByNumber.mockResolvedValueOnce(null);
+    findByUsername.mockResolvedValueOnce({ id: "callee", username: "friendly.user", number: "SC-CALLEE", display_name: "Callee" });
+    const db = {
+      prepare: vi.fn((query: string) => ({ bind: vi.fn(() => ({
+        first: vi.fn().mockResolvedValue(query.includes("user_preferences") || query.includes("julianday") ? null : undefined),
+        run: vi.fn().mockResolvedValue({ success: true }),
+      })) })),
+    };
+    const presence = namespace();
+    const response = await handleRealtimeApi(new Request("https://app.example/api/calls", {
+      method: "POST",
+      headers: { Origin: "https://app.example", "Content-Type": "application/json" },
+      body: JSON.stringify({ number: "friendly.user" }),
+    }), env(db, presence));
+
+    expect(response?.status).toBe(201);
+    expect(findByNumber).not.toHaveBeenCalled();
+    expect(findByUsername).toHaveBeenCalledWith(expect.anything(), "friendly.user");
+    expect(presence.idFromName).toHaveBeenCalledWith("callee");
   });
 
   it("cancels a call through signaling and removes its pending presence invitation", async () => {

@@ -24,10 +24,10 @@
     "offlineHelp": "在线状态尚未连接"
   },
   "quickDial": {
-    "title": "呼叫号码",
-    "detail": "输入完整的 SparkCall 号码，并注意字母大小写。",
-    "aria": "SparkCall 号码",
-    "placeholder": "输入号码",
+    "title": "联系用户",
+    "detail": "输入 SparkCall 用户名或号码。用户名不区分大小写，号码区分大小写。",
+    "aria": "SparkCall 用户名或号码",
+    "placeholder": "输入用户名或号码",
     "submit": "呼叫"
   },
   "gettingStarted": {

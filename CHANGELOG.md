@@ -11,6 +11,9 @@ unreleased development version; this file does not announce a production rollout
   private/shareable records, audio preferences and usage views.
 - Cloudflare Worker API, D1 migrations, signaling/presence Durable Objects,
   server-issued TURN credentials and optional sampled usage analytics.
+- Username-based contact from the dashboard and dialer, plus administrator-
+  managed individual and bulk monthly TURN limits enforced as an estimate-based
+  gate on new relay credentials.
 - Authentication, validation and call-entry unit tests plus an isolated local
   Worker/D1 HTTP integration runner in CI.
 - Bilingual project and contribution documentation, security/conduct policies,

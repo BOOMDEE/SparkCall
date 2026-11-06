@@ -39,9 +39,9 @@ SparkCall explores a privacy-conscious, self-hostable calling workflow: create a
 
 SparkCall 探索一种注重隐私、可自行部署的通话流程：创建账号或临时身份、获得 SparkCall 号码、管理联系人和黑名单、发起浏览器语音通话，并可选择公开特定通话记录。Worker 负责 API 和 WebSocket 入口授权；Durable Objects 协调信令与在线状态；WebRTC 在浏览器之间直传音频，无法直连时再使用 TURN。应用不会录制音频。
 
-This repository is an early pre-release with a live public preview. There is no production SLA, certification, guaranteed call quality, billing enforcement, or complete browser/device coverage. R2 uploads, payments/3DS, recording, and automatic TURN quota blocking are not implemented or enabled.
+This repository is an early pre-release with a live public preview. There is no production SLA, certification, guaranteed call quality, strict billing enforcement, or complete browser/device coverage. Admin-configurable, estimate-based per-user TURN credential limits are implemented, but they are not a hard billing or spending cap. R2 uploads, payments/3DS, and recording are not implemented or enabled.
 
-本仓库是早期预发布版本，已提供在线公开预览，但不承诺生产 SLA、安全认证、通话质量、账单强制执行或完整浏览器/设备覆盖。R2 上传、支付/3DS、录音和自动 TURN 配额阻断尚未实现或启用。
+本仓库是早期预发布版本，已提供在线公开预览，但不承诺生产 SLA、安全认证、通话质量、严格账单强制执行或完整浏览器/设备覆盖。现已实现管理员可配置的按用户 TURN 凭证估算限额，但它不是硬性账单或消费上限。R2 上传、支付/3DS 和录音尚未实现或启用。
 
 ## Implemented features / 已实现功能
 
@@ -52,6 +52,7 @@ The following describes checked-in behavior, not a product roadmap. / 以下描�
 | Username/password registration, login, logout, session lookup, and temporary guest accounts with a 24-hour default lifetime. | 用户名/密码注册、登录、退出、会话查询，以及默认 24 小时有效的临时访客账号。 |
 | Upgrade a temporary identity to a permanent account while retaining eligible identity, contacts, and records. | 将临时身份升级为永久账号，并保留符合条件的身份、联系人和记录。 |
 | Case-insensitive usernames; case-sensitive SparkCall numbers with availability checks and reserved names. | 用户名不区分大小写；SparkCall 号码区分大小写，并支持可用性检查与保留名称。 |
+| Dashboard and dialer accept either a SparkCall username or number; usernames resolve case-insensitively while exact-number calling remains supported. | 工作台和拨号台均可输入 SparkCall 用户名或号码；用户名按不区分大小写查找，原号码拨号继续可用。 |
 | Browser WebRTC audio calls with incoming invitations, accept, reject, busy, cancel, hang up, timeout, failure, and short reconnect handling. | 浏览器 WebRTC 音频通话，支持来电、接听、拒绝、忙线、取消、挂断、超时、失败和短时重连。 |
 | Authenticated WebSocket signaling for SDP offers/answers and ICE candidates, plus a separate presence object for invitations. | 经过认证的 WebSocket 信令用于 SDP offer/answer 和 ICE candidate；独立 presence 对象传递来电。 |
 | Microphone mute, input-device selection, echo cancellation, noise suppression, automatic gain control, bitrate preferences, and supported output-device selection. | 麦克风静音、输入设备选择、回声消除、噪声抑制、自动增益、码率偏好，以及在浏览器支持时选择输出设备。 |
@@ -59,7 +60,7 @@ The following describes checked-in behavior, not a product roadmap. / 以下描�
 | Call history and detail views with status, duration, and participant metadata. | 带状态、时长和参与者元数据的通话历史与详情页面。 |
 | Private call records with title, description, notes, tags/metadata, editable slug, explicit public/revoked state, expiration, consent filtering, and temporary-owner capability recovery. | 默认私有的通话记录，支持标题、描述、备注、标签/元数据、可编辑 slug、显式公开/撤销、过期、同意过滤和临时所有者 capability 恢复。 |
 | Public record pages at `/callrecords/:slug` omit internal identifiers and sensitive metadata and use `noindex, nofollow`. | `/callrecords/:slug` 公共记录页移除内部标识和敏感元数据，并设置 `noindex, nofollow`。 |
-| Server-issued short-lived Cloudflare Realtime TURN credentials and sampled per-user/platform usage estimates when analytics is configured. | 服务端签发短期 Cloudflare Realtime TURN 凭据；配置分析后提供按用户/平台的采样用量估算。 |
+| Server-issued short-lived Cloudflare Realtime TURN credentials, sampled per-user/platform usage estimates, and admin-managed individual or bulk monthly TURN limits. A known estimate at or above the limit pauses new TURN credentials; missing or failed analytics is fail-open. Actual peer-to-peer traffic is not TURN usage. These are not exact billing caps. | 服务端签发短期 Cloudflare Realtime TURN 凭据，提供按用户/平台的采样用量估算，以及管理员设置的单用户或批量月度限额。只有已取得的估算达到上限时才暂停新的 TURN 凭据；采样或分析不可用时 fail-open。实际点对点流量不计为 TURN 用量。这不是精确账单上限。 |
 | Responsive React UI with light/dark presentation, loading/empty/error states, keyboard-friendly forms, localization, and a 404 route. | 响应式 React 界面，包含浅色/深色呈现、加载/空/错误状态、键盘友好表单、本地化和 404 路由。 |
 
 ## Dashboard preview / 工作台预览
@@ -211,7 +212,7 @@ Use `.dev.vars.example` as the local template. The table names values and purpos
 | `SESSION_TTL_SECONDS` | Non-secret variable | Permanent-session lifetime; default example is `2592000`. / 永久会话时长；示例默认值为 `2592000`。 |
 | `TEMP_SESSION_TTL_SECONDS` | Non-secret variable | Temporary-session lifetime; default example is `86400`. / 临时会话时长；示例默认值为 `86400`。 |
 | `TURN_CREDENTIAL_TTL_SECONDS` | Non-secret variable | Requested lifetime for issued TURN credentials. / 已签发 TURN 凭据的请求有效期。 |
-| `ADMIN_USER_IDS` | Non-secret variable | Optional comma-separated immutable SparkCall user IDs allowed to view platform totals. / 可选的逗号分隔 SparkCall 内部用户 ID，用于查看平台总量。 |
+| `ADMIN_USER_IDS` | Non-secret variable | Optional comma-separated immutable SparkCall user IDs allowed to view platform totals and manage per-user TURN limits. / 可选的逗号分隔 SparkCall 内部用户 ID，用于查看平台总量和管理用户 TURN 限额。 |
 | `D1_DATABASE_ID` | Deployment variable / 部署变量 | Target D1 database UUID; not a secret, but keep account-specific values out of Git. / 目标 D1 数据库 UUID；它不是 secret，但账号专属值不要提交到 Git。 |
 | `SPARKCALL_HOSTNAME` | Deployment variable / 部署变量 | Custom hostname in the same Cloudflare account's active zone. / 当前 Cloudflare 账号活动 Zone 中的自定义域名。 |
 
@@ -232,6 +233,7 @@ Migrations are ordered SQL files under `migrations/` and must be applied increme
 | `0003_preserve_record_capabilities.sql` | Keeps eligible record ownership/call metadata after temporary-user cleanup with `ON DELETE SET NULL`. / 临时用户清理后保留符合条件的记录能力和通话元数据，并使用 `ON DELETE SET NULL`。 |
 | `0004_incoming_call_webhooks.sql` | Stores one encrypted incoming-call webhook configuration per user, with send timestamps. / 每个用户存储一份加密的来电 Webhook 配置及发送时间。 |
 | `0005_version_user_preferences.sql` | Adds a monotonic version to preference snapshots for serialized, race-resistant updates. / 为偏好快照加入单调版本号，降低并发更新竞态。 |
+| `0006_user_turn_quotas.sql` | Adds a nullable per-user monthly TURN egress limit. / 为用户增加可选的月度 TURN egress 限额。 |
 
 Local migration and remote migration are distinct operations:
 
@@ -257,9 +259,9 @@ The audio setting `forceTurn` selects relay-only mode: the client uses `iceTrans
 
 音频设置 `forceTurn` 会启用仅中继模式：客户端使用 `iceTransportPolicy: "relay"`。如果无法加载 TURN 凭据，强制中继通话会失败，而不会静默退回直连。这适合受控网络/隐私测试，但要求服务端 TURN 配置可用。
 
-Cloudflare Realtime TURN and SFU share a monthly 1,000 GB free allowance; after that, egress is priced at $0.05 per GB. TURN billing counts traffic sent from Cloudflare to the TURN client, including TURN overhead after successful authentication; TURN and SFU do not have separate free allowances. Check the [official Realtime pricing](https://developers.cloudflare.com/realtime/sfu/platform/pricing/) and [TURN FAQ](https://developers.cloudflare.com/realtime/turn/faq/) for current terms. Workers and Durable Objects have separate pricing. The dashboard’s `TURN_MONTHLY_QUOTA_BYTES` is display-only. Analytics are sampled and time-windowed, marked `authoritative: false`, and must not be presented as an exact bill, real-time ledger, automatic call limit, or hard spending cap. See [TURN analytics](https://developers.cloudflare.com/realtime/turn/analytics/).
+Cloudflare Realtime TURN and SFU share a monthly 1,000 GB free allowance; after that, egress is priced at $0.05 per GB. TURN billing counts traffic sent from Cloudflare to the TURN client, including TURN overhead after successful authentication; TURN and SFU do not have separate free allowances. Check the [official Realtime pricing](https://developers.cloudflare.com/realtime/sfu/platform/pricing/) and [TURN FAQ](https://developers.cloudflare.com/realtime/turn/faq/) for current terms. Workers and Durable Objects have separate pricing. The global `TURN_MONTHLY_QUOTA_BYTES` remains display-only; admins can assign per-user limits in Settings or bulk-apply one to all users. A known sampled estimate at or above a configured user limit pauses new TURN credentials; missing or failed analytics is fail-open. Peer-to-peer media does not use TURN and is not counted as TURN egress. Existing credentials remain valid until expiry. Analytics are sampled and time-windowed, marked `authoritative: false`; per-user admin snapshots rotate through at most 25 active accounts per hour, and temporary-account snapshots are removed when the account is cleaned up. Delays and outstanding credentials can cause overage, so this is a best-effort relay guard—not an exact bill, hard spending cap, or guaranteed billing limit. See [TURN analytics](https://developers.cloudflare.com/realtime/turn/analytics/).
 
-Cloudflare Realtime TURN 和 SFU 共用每月 1,000 GB 免费额度；超过后按每 GB $0.05 的 egress 计费。TURN 账单统计 Cloudflare 发往 TURN 客户端的数据（包括成功认证后的 TURN 协议开销）；TURN 和 SFU 不各自拥有独立免费额度。请以 [官方 Realtime 定价](https://developers.cloudflare.com/realtime/sfu/platform/pricing/) 和 [TURN FAQ](https://developers.cloudflare.com/realtime/turn/faq/) 为准。Workers 与 Durable Objects 另行计费。面板中的 `TURN_MONTHLY_QUOTA_BYTES` 仅用于展示；采样、按时间窗口统计的分析数据标记为 `authoritative: false`，不等于准确账单、实时账本、自动通话限制或硬性消费上限。另见 [TURN 分析](https://developers.cloudflare.com/realtime/turn/analytics/)。
+Cloudflare Realtime TURN 和 SFU 共用每月 1,000 GB 免费额度；超过后按每 GB $0.05 的 egress 计费。TURN 账单统计 Cloudflare 发往 TURN 客户端的数据（包括成功认证后的 TURN 协议开销）；TURN 和 SFU 不各自拥有独立免费额度。请以 [官方 Realtime 定价](https://developers.cloudflare.com/realtime/sfu/platform/pricing/) 和 [TURN FAQ](https://developers.cloudflare.com/realtime/turn/faq/) 为准。Workers 与 Durable Objects 另行计费。全局 `TURN_MONTHLY_QUOTA_BYTES` 仍只用于展示；管理员可在设置中逐用户配置限额，也可批量应用到所有用户。只有已取得的采样估算达到限额时，Worker 才会暂停签发新的 TURN 凭据；采样或 Analytics 缺失/故障时 fail-open，继续签发。点对点媒体流量不经过 TURN，不计入 TURN egress。已有凭据会在过期前继续有效。数据标记为 `authoritative: false`；管理员列表每小时最多轮转采样 25 个活跃账号，临时账号清理时其快照会删除。采样延迟和未过期凭据可能造成超额，因此这只是尽力而为的中继闸门，不是准确账单、硬性消费上限或保证生效的计费限制。另见 [TURN 分析](https://developers.cloudflare.com/realtime/turn/analytics/)。
 
 ## Incoming-call webhook / 来电 Webhook
 

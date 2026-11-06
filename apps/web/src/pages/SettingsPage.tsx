@@ -113,8 +113,93 @@ function WebhookSettings() {
 }
 function NotificationsSettings() { const { t } = useTranslation("settings"); return <SectionCard title={t("notifications.title")} detail={t("notifications.detail")}><div className="mt-6"><Empty title={t("notifications.emptyTitle")} detail={t("notifications.emptyDetail")} /></div></SectionCard>; }
 
-function UsageSettings() { const { t, i18n } = useTranslation("settings"); const resource = useResource<Usage>("/api/usage"), usage = resource.data; const platform = useResource<{ available: boolean; month: string; usedBytes: number | null; lastUpdated: string | null }>("/api/admin/usage"); const bytes = (value: number | null | undefined) => formatBytes(value) === "Unavailable" ? t("usage.unavailableValue") : formatBytes(value); const source = (value: string) => t(`usage.sources.${value}`, { defaultValue: t("usage.sources.unknown") }); const note = (value: string) => t(`usage.notes.${value}`, { defaultValue: value }); return <SectionCard title={t("usage.title")} detail={t("usage.detail")}>{resource.loading ? <p className="mt-6 text-sm text-neutral-500" role="status">{t("states.loading")}</p> : resource.error ? <div className="mt-4 space-y-3"><Notice>{t("errors.usage", { code: resource.error })}</Notice><Button variant="secondary" onClick={() => resource.refresh()}>{t("actions.retry")}</Button></div> : !usage?.available ? <div className="mt-5 rounded-md border border-neutral-200 p-4 text-sm leading-6 text-neutral-500 dark:border-neutral-800">{t("usage.unavailable")}</div> : <><div className="mt-6 grid gap-3 sm:grid-cols-3"><Metric label={t("usage.monthly")} value={bytes(usage.usedBytes)} /><Metric label={t("usage.quota")} value={bytes(usage.quotaBytes)} /><Metric label={t("usage.remaining")} value={bytes(usage.remainingBytes)} /></div>{usage.percentageUsed != null && <div className="mt-6"><div className="flex justify-between text-xs text-neutral-500"><span>{t("usage.quotaUsed")}</span><span>{usage.percentageUsed.toFixed(1)}%</span></div><div className="mt-2 h-2 rounded bg-neutral-100 dark:bg-neutral-900"><div className="h-2 rounded bg-neutral-900 dark:bg-neutral-100" style={{ width: `${Math.max(0, Math.min(100, usage.percentageUsed))}%` }} /></div></div>}<dl className="mt-6 grid gap-4 border-t border-neutral-200 pt-5 text-sm dark:border-neutral-800 sm:grid-cols-2"><Data label={t("usage.month")} value={usage.month} /><Data label={t("usage.lastUpdated")} value={formatDate(usage.lastUpdated, i18n.language)} /><Data label={t("usage.source")} value={source(usage.source)} /><Data label={t("usage.accounting")} value={usage.authoritative ? t("usage.authoritative") : t("usage.estimated")} /></dl><p className="mt-4 text-xs leading-5 text-neutral-500">{note(usage.note)}</p>{platform.data?.available && <div className="mt-7 border-t border-neutral-200 pt-5 dark:border-neutral-800"><h3 className="text-sm font-medium">{t("usage.platformTitle")}</h3><div className="mt-3 grid gap-4 sm:grid-cols-3"><Metric label={t("usage.month")} value={platform.data.month} /><Metric label={t("usage.egress")} value={bytes(platform.data.usedBytes)} /><Metric label={t("usage.lastUpdated")} value={formatDate(platform.data.lastUpdated, i18n.language)} /></div><p className="mt-3 text-xs text-neutral-500">{t("usage.platformDetail")}</p></div>}</>}
-  </SectionCard>; }
+function UsageSettings() {
+  const { t, i18n } = useTranslation("settings");
+  const { me } = useOutletContext<{ me: Me; setMe: (user: Me) => void }>();
+  const resource = useResource<Usage>("/api/usage"), usage = resource.data;
+  const platform = useResource<{ available: boolean; month: string; usedBytes: number | null; lastUpdated: string | null }>("/api/admin/usage");
+  const bytes = (value: number | null | undefined) => formatBytes(value) === "Unavailable" ? t("usage.unavailableValue") : formatBytes(value);
+  const source = (value: string) => t(`usage.sources.${value}`, { defaultValue: t("usage.sources.unknown") });
+  const note = (value: string) => t(`usage.notes.${value}`, { defaultValue: value });
+  return <>
+    <SectionCard title={t("usage.title")} detail={t("usage.detail")}>
+      {resource.loading ? <p className="mt-6 text-sm text-neutral-500" role="status">{t("states.loading")}</p>
+        : resource.error ? <div className="mt-4 space-y-3"><Notice>{t("errors.usage", { code: resource.error })}</Notice><Button variant="secondary" onClick={() => resource.refresh()}>{t("actions.retry")}</Button></div>
+          : !usage?.available ? <div className="mt-5 rounded-md border border-neutral-200 p-4 text-sm leading-6 text-neutral-500 dark:border-neutral-800">{t("usage.unavailable")}{me.temporary && <p className="mt-2">{t("usage.temporaryNote")}</p>}</div>
+            : <>
+              <div className="mt-6 grid gap-3 sm:grid-cols-3"><Metric label={t("usage.monthly")} value={bytes(usage.usedBytes)} /><Metric label={t(usage.limitEnforced ? "usage.quota" : "usage.referenceQuota")} value={bytes(usage.quotaBytes)} /><Metric label={t("usage.remaining")} value={bytes(usage.remainingBytes)} /></div>
+              {usage.percentageUsed != null && <div className="mt-6"><div className="flex justify-between text-xs text-neutral-500"><span>{t("usage.quotaUsed")}</span><span>{usage.percentageUsed.toFixed(1)}%</span></div><div className="mt-2 h-2 rounded bg-neutral-100 dark:bg-neutral-900"><div className="h-2 rounded bg-neutral-900 dark:bg-neutral-100" style={{ width: `${Math.max(0, Math.min(100, usage.percentageUsed))}%` }} /></div></div>}
+              <dl className="mt-6 grid gap-4 border-t border-neutral-200 pt-5 text-sm dark:border-neutral-800 sm:grid-cols-2"><Data label={t("usage.month")} value={usage.month} /><Data label={t("usage.lastUpdated")} value={formatDate(usage.lastUpdated, i18n.language)} /><Data label={t("usage.source")} value={source(usage.source)} /><Data label={t("usage.accounting")} value={usage.authoritative ? t("usage.authoritative") : t("usage.estimated")} /></dl>
+              <p className="mt-4 text-xs leading-5 text-neutral-500">{note(usage.note)} {!usage.limitEnforced && t("usage.referenceNote")}</p>
+            </>}
+    </SectionCard>
+    {platform.data && <SectionCard title={t("usage.platformTitle")} detail={t("usage.platformDetail")}>
+      <div className="mt-5 grid gap-4 sm:grid-cols-3"><Metric label={t("usage.month")} value={platform.data.month} /><Metric label={t("usage.egress")} value={bytes(platform.data.usedBytes)} /><Metric label={t("usage.lastUpdated")} value={formatDate(platform.data.lastUpdated, i18n.language)} /></div>
+      {!platform.data.available && <p className="mt-3 text-xs text-neutral-500">{t("usage.unavailable")}</p>}
+    </SectionCard>}
+    <AdminQuotaSettings />
+  </>;
+}
+
+type AdminQuotaUser = { id: string; username: string | null; displayName: string; number: string | null; temporary: boolean; expiresAt: string | null; quotaBytes: number | null; usedBytes: number | null; lastUpdated: string | null };
+type AdminQuotaData = { month: string; defaultQuotaBytes: number | null; users: AdminQuotaUser[] };
+
+function AdminQuotaSettings() {
+  const { t, i18n } = useTranslation("settings");
+  const resource = useResource<AdminQuotaData>("/api/admin/quotas");
+  const [search, setSearch] = useState("");
+  const [bulkQuota, setBulkQuota] = useState("");
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  if (resource.loading || (!resource.data && resource.error === "Not found")) return null;
+  if (resource.error || !resource.data) return <SectionCard title={t("quotas.title")} detail={t("quotas.detail")}><div className="mt-4"><Notice>{t("errors.quotaSave", { code: resource.error || "" })}</Notice></div></SectionCard>;
+  const data = resource.data;
+  const visibleUsers = data.users.filter((user) => `${user.username || ""} ${user.displayName} ${user.number || ""} ${user.id}`.toLowerCase().includes(search.trim().toLowerCase()));
+  const bytes = (value: number | null) => value == null ? t("usage.unavailableValue") : formatBytes(value);
+
+  async function saveUser(event: FormEvent, user: AdminQuotaUser) {
+    event.preventDefault(); setError(null); setNotice(null); setBusy(user.id);
+    const raw = Object.hasOwn(drafts, user.id) ? drafts[user.id]! : user.quotaBytes == null ? "" : String(user.quotaBytes / 1_000_000_000);
+    const quotaGb = raw.trim() === "" ? null : Number(raw);
+    try {
+      await api("/api/admin/quotas", { method: "PATCH", body: JSON.stringify({ userId: user.id, quotaGb }) });
+      setNotice(t("quotas.userSaved", { name: user.username || user.displayName }));
+      setDrafts((current) => { const next = { ...current }; delete next[user.id]; return next; });
+      resource.refresh();
+    } catch (cause) { setError(messageFor(cause, t, "errors.quotaSave")); }
+    finally { setBusy(null); }
+  }
+
+  async function saveBulk(event: FormEvent) {
+    event.preventDefault(); setError(null); setNotice(null); setBusy("bulk");
+    try {
+      await api("/api/admin/quotas", { method: "PATCH", body: JSON.stringify({ applyToAll: true, quotaGb: Number(bulkQuota) }) });
+      setNotice(t("quotas.bulkSaved")); setDrafts({}); resource.refresh();
+    } catch (cause) { setError(messageFor(cause, t, "errors.quotaSave")); }
+    finally { setBusy(null); }
+  }
+
+  return <SectionCard title={t("quotas.title")} detail={t("quotas.detail")}>
+    {error && <div className="mt-4"><Notice>{error}</Notice></div>}{notice && <div className="mt-4"><Notice tone="success">{notice}</Notice></div>}
+    <p className="mt-4 text-xs leading-5 text-neutral-500">{t("quotas.defaultReference", { value: bytes(data.defaultQuotaBytes) })}</p>
+    <form onSubmit={(event) => void saveBulk(event)} className="mt-5 grid gap-3 rounded-md border border-neutral-200 p-4 dark:border-neutral-800 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+      <Field label={t("quotas.bulkLimit")} type="number" min={0} max={10000} step={0.1} required value={bulkQuota} onChange={(event) => setBulkQuota(event.target.value)} />
+      <Button type="submit" disabled={busy !== null || !bulkQuota.trim()}>{busy === "bulk" ? t("actions.saving") : t("quotas.applyAll")}</Button>
+      <p className="text-xs leading-5 text-neutral-500 sm:col-span-2">{t("quotas.bulkDetail")}</p>
+    </form>
+    <div className="mt-5"><Field label={t("quotas.search")} type="search" value={search} onChange={(event) => setSearch(event.target.value)} /></div>
+    <div className="mt-3 max-h-[32rem] space-y-2 overflow-y-auto">
+      {visibleUsers.map((user) => <form key={user.id} onSubmit={(event) => void saveUser(event, user)} className="grid gap-3 rounded-md border border-neutral-200 p-3 dark:border-neutral-800 sm:grid-cols-[minmax(0,1fr)_9rem_auto] sm:items-end">
+        <div className="min-w-0"><p className="truncate text-sm font-medium">{user.username || user.displayName}{user.temporary && <span className="ml-2 rounded border border-neutral-200 px-1.5 py-0.5 text-xs font-normal text-neutral-500 dark:border-neutral-800">{t("quotas.temporary")}</span>}</p><p className="mt-1 truncate text-xs text-neutral-500">{user.number || user.id} · {t("quotas.usage")}: {bytes(user.usedBytes)}{user.lastUpdated ? ` · ${formatDate(user.lastUpdated, i18n.language)}` : ""}</p></div>
+        <Field label={t("quotas.userLimit")} type="number" min={0} max={10000} step={0.1} placeholder={t("quotas.noLimit")} value={Object.hasOwn(drafts, user.id) ? drafts[user.id] : user.quotaBytes == null ? "" : String(user.quotaBytes / 1_000_000_000)} onChange={(event) => setDrafts((current) => ({ ...current, [user.id]: event.target.value }))} />
+        <Button type="submit" variant="secondary" disabled={busy !== null}>{busy === user.id ? t("actions.saving") : t("actions.save")}</Button>
+      </form>)}
+      {!visibleUsers.length && <p className="py-4 text-center text-sm text-neutral-500">{t("quotas.noUsers")}</p>}
+    </div>
+  </SectionCard>;
+}
 function Metric({ label, value }: { label: string; value: string }) { return <div className="border border-neutral-200 p-4 dark:border-neutral-800"><p className="text-xs text-neutral-500">{label}</p><p className="mt-2 text-xl font-semibold">{value}</p></div>; }
 function Data({ label, value }: { label: string; value: string }) { return <div><dt className="text-xs text-neutral-500">{label}</dt><dd className="mt-1 break-words">{value}</dd></div>; }
 

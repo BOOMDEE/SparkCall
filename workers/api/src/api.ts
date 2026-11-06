@@ -1,7 +1,7 @@
 import type { Env } from "./env";
 import { authenticate, clearSessionCookie, createSession, hashPassword, hashToken, newToken, requireAuth, revokeSession, sessionCookie, verifyPassword, rateLimit } from "./auth";
 import { body, error, findByNumber, findUser, id, json, now, publicUser, text, validDialNumber, validNumber, validSlug, validUsername } from "./database";
-import { getPlatformTurnUsage, getUserTurnUsage } from "./turn";
+import { getPlatformTurnUsage, getUserTurnQuota, getUserTurnUsage } from "./turn";
 import { saveWebhook, validateResolvedHost, validateWebhookUrl, webhookConfigured } from "./webhook";
 
 const METHODS = new Set(["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]);
@@ -42,6 +42,17 @@ function csrf(request: Request, env: Env) {
   const origin = request.headers.get("Origin");
   if (!origin) return false;
   try { return origin === (env.ALLOWED_ORIGIN || new URL(request.url).origin); } catch { return false; }
+}
+
+function isAdmin(user: { id: string }, env: Env) {
+  return new Set((env.ADMIN_USER_IDS || "").split(",").map((value) => value.trim()).filter(Boolean)).has(user.id);
+}
+
+function quotaBytesFromGb(value: unknown): number | null | undefined {
+  if (value === null || value === 0) return null;
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 10_000) return undefined;
+  const bytes = Math.round(value * 1_000_000_000);
+  return Number.isSafeInteger(bytes) && bytes > 0 ? bytes : undefined;
 }
 
 function isReserved(value: string) {
@@ -515,15 +526,67 @@ async function route(request: Request, env: Env): Promise<Response> {
     const user = await requireAuth(request, env);
     return json(await getUserTurnUsage(env, user.id));
   }
+  if (path === "/api/admin/quotas" && method === "GET") {
+    const user = await requireAuth(request, env);
+    if (!isAdmin(user, env)) return error("Not found", 404, "NOT_FOUND");
+    const month = new Date().toISOString().slice(0, 7);
+    const rows = await env.DB.prepare(`
+      SELECT u.id,u.username,u.display_name,u.number,u.is_temporary,u.expires_at,
+        u.turn_monthly_quota_bytes,s.bytes_used,s.captured_at
+      FROM users u LEFT JOIN usage_snapshots s ON s.user_id=u.id AND s.month=?1
+      ORDER BY COALESCE(u.username,u.display_name) COLLATE NOCASE,u.id LIMIT 1000
+    `).bind(month).all<any>();
+    const defaultQuota = Number(env.TURN_MONTHLY_QUOTA_BYTES);
+    return json({
+      month,
+      defaultQuotaBytes: Number.isSafeInteger(defaultQuota) && defaultQuota > 0 ? defaultQuota : null,
+      users: rows.results.map((row) => ({
+        id: row.id,
+        username: row.username ?? null,
+        displayName: row.display_name,
+        number: row.number ?? null,
+        temporary: !!row.is_temporary,
+        expiresAt: row.expires_at ?? null,
+        quotaBytes: row.turn_monthly_quota_bytes == null ? null : Number(row.turn_monthly_quota_bytes),
+        usedBytes: row.bytes_used == null ? null : Number(row.bytes_used),
+        lastUpdated: row.captured_at ?? null,
+      })),
+    });
+  }
+  if (path === "/api/admin/quotas" && method === "PATCH") {
+    const user = await requireAuth(request, env);
+    if (!isAdmin(user, env)) return error("Not found", 404, "NOT_FOUND");
+    const input = await body(request);
+    const quotaBytes = quotaBytesFromGb(input.quotaGb);
+    if (quotaBytes === undefined) return error("Quota must be from 0 to 10,000 GB per month", 400, "INVALID_QUOTA");
+    if (input.applyToAll === true) {
+      const result = await env.DB.prepare("UPDATE users SET turn_monthly_quota_bytes=?1,updated_at=?2")
+        .bind(quotaBytes, now()).run();
+      return json({ ok: true, updated: result.meta?.changes ?? null });
+    }
+    const userId = text(input.userId, 128);
+    if (!userId) return error("A user ID is required", 400, "INVALID_USER");
+    const target = await env.DB.prepare("SELECT id FROM users WHERE id=?1").bind(userId).first();
+    if (!target) return error("User not found", 404, "NOT_FOUND");
+    await env.DB.prepare("UPDATE users SET turn_monthly_quota_bytes=?1,updated_at=?2 WHERE id=?3")
+      .bind(quotaBytes, now(), userId).run();
+    return json({ ok: true });
+  }
   if (path === "/api/admin/usage" && method === "GET") {
     const user = await requireAuth(request, env);
-    const admins = new Set((env.ADMIN_USER_IDS || "").split(",").map((value) => value.trim()).filter(Boolean));
-    if (!admins.has(user.id)) return error("Not found", 404, "NOT_FOUND");
+    if (!isAdmin(user, env)) return error("Not found", 404, "NOT_FOUND");
     return json(await getPlatformTurnUsage(env));
   }
   if (path === "/api/turn/credentials" && method === "GET") {
     const user = await requireAuth(request, env);
     if (!env.TURN_KEY_ID || !env.TURN_API_TOKEN) return error("TURN is not configured", 503, "TURN_UNAVAILABLE");
+    const quota = await getUserTurnQuota(env, user.id);
+    if (quota.limitEnforced) {
+      const usage = await getUserTurnUsage(env, user.id, quota);
+      if (usage.available && quota.quotaBytes !== null && usage.usedBytes !== null && usage.usedBytes >= quota.quotaBytes) {
+        return error("The estimated monthly TURN limit has been reached; new relay credentials are paused until the next month.", 429, "TURN_QUOTA_EXCEEDED");
+      }
+    }
     const ttl = Math.max(60, Math.min(86_400, Number(env.TURN_CREDENTIAL_TTL_SECONDS) || 3600));
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), TURN_PROVIDER_TIMEOUT_MS);

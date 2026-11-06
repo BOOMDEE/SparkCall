@@ -5,6 +5,7 @@ import {
   bytes,
   error,
   findByNumber,
+  findByUsername,
   findUser,
   hex,
   id,
@@ -102,6 +103,13 @@ describe("database query boundaries", () => {
     const user = db({ id: "u1" });
     await findUser(user.DB as any, "u1' OR 1=1 --");
     expect(user.prepared.bind).toHaveBeenCalledWith("u1' OR 1=1 --");
+  });
+
+  it("uses case-insensitive parameterized username lookup", async () => {
+    const byUsername = db({ id: "u1" });
+    await expect(findByUsername(byUsername.DB as any, "Friendly.User")).resolves.toEqual({ id: "u1" });
+    expect(byUsername.DB.prepare.mock.calls[0]?.[0]).toContain("COLLATE NOCASE");
+    expect(byUsername.prepared.bind).toHaveBeenCalledWith("Friendly.User");
   });
 
   it("returns a boolean for the block relationship query", async () => {

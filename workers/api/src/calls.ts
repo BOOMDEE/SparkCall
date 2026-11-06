@@ -1,6 +1,6 @@
 import type { Env } from "./env";
 import { rateLimit, requireAuth } from "./auth";
-import { body, error, findByNumber, id, isBlocked, json, now, validDialNumber } from "./database";
+import { body, error, findByNumber, findByUsername, id, isBlocked, json, now, validDialNumber, validUsername } from "./database";
 import { triggerIncomingCallWebhook } from "./webhook";
 
 const ACTIVE = "'calling','ringing','connecting','connected'";
@@ -32,10 +32,11 @@ async function createCall(request: Request, env: Env, ctx?: ExecutionContext): P
     return error("Too many call attempts; try again shortly", 429, "RATE_LIMITED");
   }
   const input = await body(request);
-  const number = String(input.number ?? input.targetNumber ?? "").trim();
-  if (!validDialNumber(number)) return error("Enter a valid SparkCall number", 400, "INVALID_NUMBER");
-  const callee = await findByNumber(env.DB, number);
-  if (!callee) return error("SparkCall number not found", 404, "NUMBER_NOT_FOUND");
+  const identifier = String(input.number ?? input.targetNumber ?? "").trim();
+  if (!validDialNumber(identifier) && !validUsername(identifier)) return error("Enter a valid SparkCall number or username", 400, "INVALID_NUMBER");
+  const callee = (validDialNumber(identifier) ? await findByNumber(env.DB, identifier) : null)
+    ?? (validUsername(identifier) ? await findByUsername(env.DB, identifier) : null);
+  if (!callee) return error("SparkCall number or username not found", 404, "NUMBER_NOT_FOUND");
   if (callee.id === caller.id) return error("You cannot call yourself", 400, "SELF_CALL");
   if (await isBlocked(env.DB, caller.id, callee.id) || await isBlocked(env.DB, callee.id, caller.id)) return error("This call is not allowed", 403, "CALL_BLOCKED");
   const preferences = await env.DB.prepare("SELECT settings_json FROM user_preferences WHERE user_id=?1").bind(callee.id).first<{ settings_json: string }>();

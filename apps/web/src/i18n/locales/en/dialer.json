@@ -1,7 +1,7 @@
 {
   "eyebrow": "Browser calling",
   "title": "Dialer",
-  "detail": "Start a private browser call with a SparkCall number. Your microphone is requested only when audio is needed.",
+  "detail": "Start a private browser call with a SparkCall username or number. Your microphone is requested only when audio is needed.",
   "sections": {
     "placeCall": "Place a call",
     "currentCall": "Current call",
@@ -9,9 +9,9 @@
   },
   "form": {
     "prompt": "Who do you want to call?",
-    "numberLabel": "SparkCall number",
-    "numberPlaceholder": "For example: SC888",
-    "numberHint": "Numbers are case-sensitive. Enter the recipient’s exact SparkCall number.",
+    "numberLabel": "SparkCall username or number",
+    "numberPlaceholder": "For example: alice or SC888",
+    "numberHint": "Usernames are case-insensitive; numbers are case-sensitive.",
     "privacyNote": "Audio stays between callers through encrypted WebRTC.",
     "call": "Call",
     "connecting": "Connecting…"
@@ -83,7 +83,7 @@
     "failureHint": "If the connection fails, confirm TURN credentials are configured for this deployment and try again."
   },
   "errors": {
-    "missingNumber": "Enter a SparkCall number before calling.",
+    "missingNumber": "Enter a SparkCall username or number before calling.",
     "callFailed": "Could not start the call. {{detail}}",
     "preferencesLoading": "Loading call preferences. Calling is temporarily unavailable.",
     "preferencesFailed": "Call preferences could not be loaded. Calling is blocked until they are loaded successfully.",

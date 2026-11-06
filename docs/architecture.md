@@ -45,7 +45,7 @@ sequenceDiagram
 
 ## TURN 用量
 
-Worker 使用 Cloudflare Realtime 官方 GraphQL Analytics 查询 `egressBytes`，并以 `customIdentifier` 区分用户。定时任务每小时轮转最多 25 个活动用户并将估算快照写入 D1。采样数据可能延迟或不完整，因此接口标记 `authoritative: false`。TURN 费用按 Cloudflare Realtime 的适用计费规则（包括适用的中继 egress）产生；`TURN_MONTHLY_QUOTA_BYTES` 只是展示配额，不是实时流量闸门或硬性消费上限。分析 API token 仅存在于 Worker secret，不会返回浏览器。
+Worker 使用 Cloudflare Realtime 官方 GraphQL Analytics 查询 `egressBytes`，并以 `customIdentifier`（用户内部 ID）区分用户；活动临时账号也参与每小时最多 25 个用户的快照轮转。临时账号到期清理时，其用量快照随用户删除；管理员用户列表展示轮转快照，新账号可能要等到采样后才有估算值。采样数据可能延迟或不完整，因此接口标记 `authoritative: false`。管理员可为单个用户设置月度 egress 限额，也可批量应用到所有用户。只有在拿到可用估算且达到限额时才暂停新 TURN 凭据；采样或 Analytics 不可用时 fail-open，继续签发凭据。未强制 TURN 的通话仍可尝试 P2P；实际走 P2P 的媒体流量不计入 TURN egress。已经签发的凭据会持续到期，采样延迟也可能导致超额，因此该功能是尽力而为的中继闸门，不是硬性消费上限。`TURN_MONTHLY_QUOTA_BYTES` 仍只作为展示参考。分析 API token 仅存在于 Worker secret，不会返回浏览器。
 
 ## 计划取舍与限制
 

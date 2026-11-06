@@ -33,7 +33,8 @@
     "privacySave": "Could not save privacy preferences. {{code}}",
     "usage": "Could not load usage data. {{code}}",
     "appearanceSave": "Could not save appearance preference. {{code}}",
-    "webhook": "Could not load or save the webhook. {{code}}"
+    "webhook": "Could not load or save the webhook. {{code}}",
+    "quotaSave": "Could not save TURN limit. {{code}}"
   },
   "account": {
     "title": "Account and identity",
@@ -105,9 +106,12 @@
     "title": "TURN usage",
     "detail": "Monthly relay usage from Cloudflare Realtime analytics. Sampled analytics may not equal final billing data.",
     "unavailable": "Usage reporting is not configured or the analytics service returned no data. Calls can still work when TURN credentials are configured.",
+    "temporaryNote": "Temporary accounts are measured by internal account ID. The admin list samples up to 25 active accounts per hour, so a new account may not have a snapshot yet. Historical snapshots are deleted when the account expires and is cleaned up. Platform totals are admin-only.",
     "unavailableValue": "Unavailable",
     "monthly": "Monthly usage",
-    "quota": "Quota",
+    "quota": "Monthly limit",
+    "referenceQuota": "Reference allowance (not enforced)",
+    "referenceNote": "The global reference allowance is display-only; only an admin-assigned per-user limit pauses new TURN credentials.",
     "remaining": "Remaining",
     "quotaUsed": "Quota used",
     "month": "Month",
@@ -118,9 +122,25 @@
     "estimated": "Estimated / sampled",
     "platformTitle": "Platform total · authorized administrators",
     "egress": "TURN egress",
-    "platformDetail": "Aggregate values are sampled estimates, not authoritative billing totals.",
+    "platformDetail": "This is a sampled estimate for the entire Cloudflare account, not an authoritative billing total; it is independent of the current user's usage status. Unavailable is shown if analytics cannot be queried.",
     "sources": { "cloudflare-realtime-analytics": "Cloudflare Realtime Analytics", "cached-snapshot": "Cached snapshot", "unavailable": "Unavailable", "unknown": "Unknown" },
     "notes": { "Cloudflare Realtime Analytics is sampled and time-windowed; this dashboard is an estimate, not exact real-time billing data. TURN billing measures egress bytes.": "Cloudflare Realtime Analytics is sampled and time-windowed; this dashboard is an estimate, not exact real-time billing data. TURN billing measures egress bytes." }
+  },
+  "quotas": {
+    "title": "User TURN monthly limits",
+    "detail": "Admins can set a limit per user or bulk-apply one to every account. Limits use decimal GB; leave an individual field blank for no per-user limit. User usage comes from an hourly rotation of up to 25 active accounts; a temporary account may expire before sampling, and cleanup deletes its historical snapshot.",
+    "defaultReference": "Current global reference allowance: {{value}} (display-only, not enforced).",
+    "bulkLimit": "Bulk monthly limit (GB)",
+    "applyAll": "Apply to all accounts",
+    "bulkDetail": "Enter a positive number to set limits in bulk; enter 0 to clear every account's individual limit.",
+    "search": "Search accounts",
+    "temporary": "Temporary",
+    "usage": "Estimated this month",
+    "userLimit": "User limit (GB)",
+    "noLimit": "Not set",
+    "userSaved": "Saved the limit for {{name}}.",
+    "bulkSaved": "Updated limits for all accounts.",
+    "noUsers": "No matching accounts."
   },
   "webhook": {
     "title": "Incoming-call webhook",

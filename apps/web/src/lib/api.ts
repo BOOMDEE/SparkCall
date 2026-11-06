@@ -56,6 +56,7 @@ export type Usage = {
   quotaBytes: number | null;
   remainingBytes: number | null;
   percentageUsed: number | null;
+  limitEnforced: boolean;
   lastUpdated: string | null;
   source: string;
   authoritative: boolean;
