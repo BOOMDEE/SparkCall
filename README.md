@@ -32,6 +32,8 @@ The following local browser captures use synthetic demo data and show the checke
   **账号与联系人：** 用户名/密码账号、限时临时账号、账号升级、联系人、收藏和黑名单。临时账号默认 24 小时过期；默认不限制有效临时账号总数，但按 IP 限制创建频率。
 - **Browser calls:** WebRTC audio, call invitations and lifecycle controls, microphone/device preferences, and a current-path indicator based on browser ICE statistics.<br>
   **浏览器通话：** WebRTC 音频、来电邀请与通话控制、麦克风/设备偏好；当前媒体路径根据浏览器 ICE 统计判定。
+- **Username call links:** an authenticated `/makecall/<username>` link starts a live call invitation after sign-in. The server uses the existing rate limits, block checks, incoming-call preference and busy checks; it does not add anonymous calling or a public username-lookup API. The browser may still request microphone permission.<br>
+  **用户名直拨链接：** 登录后的 `/makecall/<username>` 链接会直接发起实时通话邀请。服务器继续执行现有限流、黑名单、接听偏好和忙线检查；不会新增匿名呼叫或公开用户名查询接口。浏览器仍可能请求麦克风权限。
 - **Connection preferences:** `Auto` prefers direct P2P and can fall back to TURN; `P2P-only` does not request TURN credentials; `TURN-only` requires a relay. A preference change affects the next call only.<br>
   **连接偏好：** `Auto` 优先 P2P 直连，必要时可回退到 TURN；`P2P-only` 不请求 TURN 凭据；`TURN-only` 必须通过中继。更改只对下一通生效。
 - **Call records:** private by default; explicit public/revoked state, expiry, and public pages that omit internal identifiers and use `noindex, nofollow`. The app does not record call audio.<br>

@@ -5,6 +5,7 @@ import {
   bytes,
   error,
   findByNumber,
+  findByUsername,
   findUser,
   hex,
   id,
@@ -102,6 +103,16 @@ describe("database query boundaries", () => {
     const user = db({ id: "u1" });
     await findUser(user.DB as any, "u1' OR 1=1 --");
     expect(user.prepared.bind).toHaveBeenCalledWith("u1' OR 1=1 --");
+  });
+
+  it("resolves permanent usernames case-insensitively without selecting password hashes", async () => {
+    const byUsername = db({ id: "u1" });
+    await expect(findByUsername(byUsername.DB as any, "AlIcE")).resolves.toEqual({ id: "u1" });
+    const query = String(byUsername.DB.prepare.mock.calls[0]?.[0]);
+    expect(query).toContain("COLLATE NOCASE");
+    expect(query).toContain("is_temporary=0");
+    expect(query).not.toMatch(/password_hash|SELECT\s+\*/i);
+    expect(byUsername.prepared.bind).toHaveBeenCalledWith("AlIcE");
   });
 
   it("returns a boolean for the block relationship query", async () => {

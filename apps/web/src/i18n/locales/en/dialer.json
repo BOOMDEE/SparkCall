@@ -1,7 +1,7 @@
 {
   "eyebrow": "Browser calling",
   "title": "Dialer",
-  "detail": "Start a private browser call with a SparkCall number. Your microphone is requested only when audio is needed.",
+  "detail": "Start a private browser call with a SparkCall number or username link. Your microphone is requested only when audio is needed.",
   "sections": {
     "placeCall": "Place a call",
     "currentCall": "Current call",
@@ -12,8 +12,11 @@
     "numberLabel": "SparkCall number",
     "numberPlaceholder": "For example: SC888",
     "numberHint": "Numbers are case-sensitive. Enter the recipient’s exact SparkCall number.",
+    "usernamePrompt": "Calling {{username}}",
+    "usernameHint": "This link starts a live call to the SparkCall account {{username}}. You can cancel while it rings.",
     "privacyNote": "Audio stays between callers through encrypted WebRTC.",
     "call": "Call",
+    "callUser": "Call {{username}}",
     "connecting": "Connecting…"
   },
   "identity": {
@@ -40,7 +43,8 @@
     "cancel": "Cancel",
     "hangUp": "Hang up",
     "refreshDevices": "Refresh devices",
-    "retry": "Retry"
+    "retry": "Retry",
+    "openCurrentCall": "Open current call"
   },
   "incomingDialog": {
     "title": "Incoming call",
@@ -107,6 +111,7 @@
   },
   "errors": {
     "missingNumber": "Enter a SparkCall number before calling.",
+    "alreadyOnCall": "A call is already in progress. End it before retrying this username link.",
     "callFailed": "Could not start the call. {{detail}}",
     "preferencesLoading": "Loading call preferences. Calling is temporarily unavailable.",
     "preferencesFailed": "Call preferences could not be loaded. Calling is blocked until they are loaded successfully.",

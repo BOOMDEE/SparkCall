@@ -187,6 +187,8 @@ def run():
             print("Testing real local HTTP routes...", flush=True)
             anonymous, alice, bob, guest = [Client(origin) for _ in range(4)]
             anonymous.request("GET", "/")
+            makecall_html, _ = anonymous.request("GET", "/makecall/Alice")
+            assert "<!doctype html>" in makecall_html.lower(), f"Expected SPA HTML for username call link, received {makecall_html[:150]!r}"
             html, headers = anonymous.request("GET", "/callrecords/private-meeting")
             assert "<!doctype html>" in html.lower(), f"Expected SPA HTML, received {html[:150]!r}"
             assert headers.get("X-Robots-Tag") == "noindex, nofollow"
@@ -242,6 +244,9 @@ def run():
             bob.request("POST", "/api/blocked", {"number": "CaseNumber"})
             alice.request("POST", "/api/calls", {"number": "casenumber"}, status=403)
             bob.request("DELETE", "/api/blocked", {"number": "CaseNumber"})
+            username_call, _ = alice.request("POST", "/api/calls", {"targetUsername": "BOB"}, status=201)
+            assert username_call["userId"] == ids[1]
+            alice.request("POST", f"/api/calls/{username_call['callId']}/cancel", {})
             alice_secondary = Client(origin)
             alice_secondary.request("POST", "/api/auth/login", {"username": "alice", "password": PASSWORD})
             baseline, _ = alice.request("GET", "/api/settings/preferences")

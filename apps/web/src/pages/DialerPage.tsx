@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Mic, MicOff, PhoneCall, PhoneOff, RefreshCw, ShieldCheck, Volume2 } from "lucide-react";
 import { api, type UserPreferences } from "../lib/api";
@@ -19,19 +19,23 @@ function errorMessage(cause: unknown, t: Translate, key: string) {
 
 export default function DialerPage() {
   const { t } = useTranslation("dialer");
+  const { username: routeUsername } = useParams<{ username?: string }>();
+  const targetUsername = routeUsername?.trim() || "";
   const [params] = useSearchParams();
   const [number, setNumber] = useState(params.get("number") || "");
   const [requesting, setRequesting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [autoCallUsername, setAutoCallUsername] = useState<string | null>(null);
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [deviceError, setDeviceError] = useState<string | null>(null);
   const [modeSaving, setModeSaving] = useState(false);
   const session = useCallSession();
   const callAttemptRef = useRef(0);
+  const autoCallAttemptRef = useRef<string | null>(null);
   const call = session.snapshot;
   const active = !TERMINAL_STATES.has(call.state);
   const peerName = call.role === "caller"
-    ? number.trim() || t("identity.outgoingCall")
+    ? (targetUsername && autoCallUsername === targetUsername ? targetUsername : number.trim() || t("identity.outgoingCall"))
     : session.peer?.callerName || session.peer?.callerNumber || t("identity.incomingCaller");
   const stateLabel = t(`states.${call.state.toLowerCase()}`);
   const statusTone = call.state === "CONNECTED" ? "success" : call.state === "FAILED" ? "error" : "warning";
@@ -41,9 +45,9 @@ export default function DialerPage() {
     if (fromUrl) setNumber(fromUrl);
   }, [params]);
 
-  async function placeCall(event?: FormEvent) {
+  const placeCall = useCallback(async (event?: FormEvent) => {
     event?.preventDefault();
-    if (!number.trim()) {
+    if (!targetUsername && !number.trim()) {
       setError(t("errors.missingNumber"));
       return;
     }
@@ -55,7 +59,7 @@ export default function DialerPage() {
     try {
       const created = await api<{ callId: string; userId: string }>("/api/calls", {
         method: "POST",
-        body: JSON.stringify({ number: number.trim() }),
+        body: JSON.stringify(targetUsername ? { targetUsername } : { number: number.trim() }),
       });
       callId = created.callId;
       await session.controller.startOutgoing(created.callId, created.userId);
@@ -67,7 +71,24 @@ export default function DialerPage() {
     } finally {
       if (attempt === callAttemptRef.current) setRequesting(false);
     }
-  }
+  }, [number, session.controller, session.preferencesReady, t, targetUsername]);
+
+  useEffect(() => {
+    if (!targetUsername) {
+      autoCallAttemptRef.current = null;
+      setAutoCallUsername(null);
+      return;
+    }
+    if (autoCallAttemptRef.current === targetUsername) return;
+    if (active || session.incoming) {
+      autoCallAttemptRef.current = targetUsername;
+      return;
+    }
+    if (!session.controller || !session.preferencesReady) return;
+    autoCallAttemptRef.current = targetUsername;
+    setAutoCallUsername(targetUsername);
+    void placeCall();
+  }, [active, placeCall, session.controller, session.incoming, session.preferencesReady, targetUsername]);
 
   function cancelServerCall(callId: string): Promise<void> {
     return api(`/api/calls/${encodeURIComponent(callId)}/cancel`, { method: "POST" })
@@ -127,33 +148,36 @@ export default function DialerPage() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-xs font-medium uppercase tracking-widest text-neutral-500">{active ? t("sections.currentCall") : t("sections.placeCall")}</p>
-              <h2 className="mt-1 text-lg font-semibold tracking-tight">{active ? peerName : t("form.prompt")}</h2>
+              <h2 className="mt-1 text-lg font-semibold tracking-tight">{active ? peerName : targetUsername ? t("form.usernamePrompt", { username: targetUsername }) : t("form.prompt")}</h2>
             </div>
             {active && <StatusPill tone={statusTone}>{stateLabel}</StatusPill>}
           </div>
         </div>
 
         {!active ? <form onSubmit={(event) => void placeCall(event)} className="p-5 sm:p-7">
-          <Field
-            label={t("form.numberLabel")}
-            autoComplete="off"
-            inputMode="text"
-            value={number}
-            onChange={(event) => { setNumber(event.target.value); if (error) setError(null); }}
-            placeholder={t("form.numberPlaceholder")}
-            aria-describedby="dialer-number-hint"
-          />
-          <p id="dialer-number-hint" className="mt-2 text-xs leading-5 text-neutral-500">{t("form.numberHint")}</p>
+          {targetUsername ? <p className="text-sm text-neutral-600 dark:text-neutral-400">{t("form.usernameHint", { username: targetUsername })}</p> : <>
+            <Field
+              label={t("form.numberLabel")}
+              autoComplete="off"
+              inputMode="text"
+              value={number}
+              onChange={(event) => { setNumber(event.target.value); if (error) setError(null); }}
+              placeholder={t("form.numberPlaceholder")}
+              aria-describedby="dialer-number-hint"
+            />
+            <p id="dialer-number-hint" className="mt-2 text-xs leading-5 text-neutral-500">{t("form.numberHint")}</p>
+          </>}
           {error && <div className="mt-4"><Notice>{error}</Notice></div>}
           {!session.preferencesReady && <div className="mt-4"><Notice>{t(session.preferenceLoadError ? "errors.preferencesFailed" : "errors.preferencesLoading")} {session.preferenceLoadError && <Button variant="ghost" className="ml-2 px-2 py-1" onClick={session.retryPreferences}><RefreshCw size={14} aria-hidden="true" />{t("actions.retry")}</Button>}</Notice></div>}
           {session.error && <div className="mt-4"><Notice>{t("errors.session", { detail: session.error })}</Notice></div>}
           <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
-            <Button type="submit" className="sm:min-w-36" disabled={requesting || !session.controller || !session.preferencesReady}>
-              <PhoneCall size={16} aria-hidden="true" />{requesting ? t("form.connecting") : t("form.call")}
+              <Button type="submit" className="sm:min-w-36" disabled={requesting || !session.controller || !session.preferencesReady}>
+              <PhoneCall size={16} aria-hidden="true" />{requesting ? t("form.connecting") : targetUsername ? t("form.callUser", { username: targetUsername }) : t("form.call")}
             </Button>
             <p className="flex items-center gap-2 text-xs text-neutral-500"><ShieldCheck size={14} aria-hidden="true" />{t("form.privacyNote")}</p>
           </div>
         </form> : <div className="p-5 sm:p-7">
+          {targetUsername && call.role === "caller" && autoCallUsername !== targetUsername && <div className="mb-5 flex flex-wrap items-center justify-between gap-3"><Notice>{t("errors.alreadyOnCall")}</Notice><Link className="text-sm underline underline-offset-4" to="/call">{t("actions.openCurrentCall")}</Link></div>}
           <div className="flex items-center gap-3 text-sm text-neutral-500">
             <span className={`h-2 w-2 rounded-full ${call.state === "CONNECTED" ? "bg-green-500" : "bg-amber-500"}`} aria-hidden="true" />
             <span aria-live="polite">{stateLabel}</span>

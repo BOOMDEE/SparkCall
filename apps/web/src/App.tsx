@@ -22,6 +22,7 @@ export default function App() {
     <Route element={<AuthenticatedLayout />}>
       <Route path="/dashboard" element={<DashboardPage />} />
       <Route path="/call" element={<DialerPage />} />
+      <Route path="/makecall/:username" element={<DialerPage />} />
       <Route path="/contacts" element={<ContactsPage />} />
       <Route path="/contacts/:id" element={<ContactDetailPage />} />
       <Route path="/history" element={<HistoryPage />} />

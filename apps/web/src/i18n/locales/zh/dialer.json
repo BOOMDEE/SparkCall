@@ -1,7 +1,7 @@
 {
   "eyebrow": "浏览器通话",
   "title": "拨号台",
-  "detail": "使用 SparkCall 号码发起私密浏览器通话。仅在需要音频时请求麦克风权限。",
+  "detail": "使用 SparkCall 号码或用户名链接发起私密浏览器通话。仅在需要音频时请求麦克风权限。",
   "sections": {
     "placeCall": "发起通话",
     "currentCall": "当前通话",
@@ -12,8 +12,11 @@
     "numberLabel": "SparkCall 号码",
     "numberPlaceholder": "例如：SC888",
     "numberHint": "号码区分大小写。请输入对方准确的 SparkCall 号码。",
+    "usernamePrompt": "正在呼叫 {{username}}",
+    "usernameHint": "此链接将向 SparkCall 用户 {{username}} 发起实时通话。响铃期间可以取消。",
     "privacyNote": "音频通过加密 WebRTC 保持在通话双方之间。",
     "call": "呼叫",
+    "callUser": "呼叫 {{username}}",
     "connecting": "正在连接…"
   },
   "identity": {
@@ -40,7 +43,8 @@
     "cancel": "取消",
     "hangUp": "挂断",
     "refreshDevices": "刷新设备",
-    "retry": "重试"
+    "retry": "重试",
+    "openCurrentCall": "打开当前通话"
   },
   "incomingDialog": {
     "title": "来电",
@@ -107,6 +111,7 @@
   },
   "errors": {
     "missingNumber": "请输入 SparkCall 号码后再呼叫。",
+    "alreadyOnCall": "已有通话正在进行，请先结束当前通话，再重试此用户名链接。",
     "callFailed": "无法发起通话。{{detail}}",
     "preferencesLoading": "正在加载通话偏好设置，暂时无法呼叫。",
     "preferencesFailed": "无法加载通话偏好设置。在成功加载前，呼叫已被阻止。",

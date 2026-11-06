@@ -3,7 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const requireAuth = vi.fn();
 const rateLimit = vi.fn();
 const findByNumber = vi.fn();
+const findByUsername = vi.fn();
 const isBlocked = vi.fn();
+const validUsername = vi.fn((value: string) => /^[A-Za-z0-9_][A-Za-z0-9_.-]{2,31}$/.test(value));
 
 vi.mock("./auth", () => ({ requireAuth, rateLimit }));
 vi.mock("./database", () => ({
@@ -11,11 +13,13 @@ vi.mock("./database", () => ({
   error: (message: string, status = 400, code = "BAD_REQUEST") =>
     new Response(JSON.stringify({ error: { code, message } }), { status }),
   findByNumber,
+  findByUsername,
   id: () => "call-12345678",
   isBlocked,
   json: (value: unknown, status = 200) => new Response(JSON.stringify(value), { status }),
   now: () => "2026-11-02T10:00:00.000Z",
   validDialNumber: () => true,
+  validUsername,
 }));
 
 const { handleRealtimeApi } = await import("./calls");
@@ -45,6 +49,7 @@ beforeEach(() => {
   rateLimit.mockReset().mockResolvedValue(true);
   requireAuth.mockResolvedValue({ id: "caller", number: "SC-CALLER", display_name: "Caller", session_id: "session" });
   findByNumber.mockResolvedValue({ id: "callee", number: "SC-CALLEE", display_name: "Callee" });
+  findByUsername.mockResolvedValue({ id: "callee", username: "alice", number: "SC-CALLEE", display_name: "Callee" });
   isBlocked.mockResolvedValue(false);
 });
 
@@ -112,6 +117,71 @@ describe("realtime call authorization and activity checks", () => {
     const activityQuery = statements.find((query) => query.includes("FROM call_history") && query.includes("LIMIT 1"));
     expect(activityQuery).toContain("julianday(started_at)>julianday('now','-2 minutes')");
     expect(activityQuery).not.toContain("started_at>datetime('now','-2 minutes')");
+  });
+
+  it("creates a live call from a username using the existing invitation path", async () => {
+    const db = {
+      prepare: vi.fn(() => ({ bind: vi.fn(() => ({
+        first: vi.fn().mockResolvedValue(null),
+        run: vi.fn().mockResolvedValue({ success: true }),
+      })) })),
+    };
+    const presence = namespace();
+    const response = await handleRealtimeApi(new Request("https://app.example/api/calls", {
+      method: "POST",
+      headers: { Origin: "https://app.example", "Content-Type": "application/json" },
+      body: JSON.stringify({ targetUsername: "AlIcE" }),
+    }), env(db, presence));
+
+    expect(response?.status).toBe(201);
+    expect(findByUsername).toHaveBeenCalledWith(db, "AlIcE");
+    expect(findByNumber).not.toHaveBeenCalled();
+    await expect(response?.json()).resolves.toMatchObject({ userId: "callee", targetNumber: "SC-CALLEE", status: "CALLING" });
+    expect(presence.stub.fetch).toHaveBeenCalledWith("https://presence.internal/invite", expect.objectContaining({ method: "POST" }));
+  });
+
+  it.each([
+    [{ targetUsername: "bad name" }, "INVALID_USERNAME"],
+    [{ targetUsername: "alice", number: "SC-CALLEE" }, "AMBIGUOUS_TARGET"],
+    [{ targetUsername: 42 }, "INVALID_USERNAME"],
+  ])("rejects invalid or conflicting username targets", async (payload, code) => {
+    const response = await handleRealtimeApi(new Request("https://app.example/api/calls", {
+      method: "POST",
+      headers: { Origin: "https://app.example", "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }), env({ prepare: vi.fn() }));
+
+    expect(response?.status).toBe(400);
+    await expect(response?.json()).resolves.toMatchObject({ error: { code } });
+    expect(findByUsername).not.toHaveBeenCalled();
+  });
+
+  it("does not invite a username that cannot be resolved", async () => {
+    findByUsername.mockResolvedValueOnce(null);
+    const presence = namespace();
+    const response = await handleRealtimeApi(new Request("https://app.example/api/calls", {
+      method: "POST",
+      headers: { Origin: "https://app.example", "Content-Type": "application/json" },
+      body: JSON.stringify({ targetUsername: "missing" }),
+    }), env({ prepare: vi.fn() }, presence));
+
+    expect(response?.status).toBe(404);
+    await expect(response?.json()).resolves.toMatchObject({ error: { code: "USERNAME_NOT_FOUND" } });
+    expect(presence.stub.fetch).not.toHaveBeenCalled();
+  });
+
+  it("applies the existing block checks to username calls", async () => {
+    isBlocked.mockResolvedValueOnce(true);
+    const presence = namespace();
+    const response = await handleRealtimeApi(new Request("https://app.example/api/calls", {
+      method: "POST",
+      headers: { Origin: "https://app.example", "Content-Type": "application/json" },
+      body: JSON.stringify({ targetUsername: "alice" }),
+    }), env({ prepare: vi.fn() }, presence));
+
+    expect(response?.status).toBe(403);
+    await expect(response?.json()).resolves.toMatchObject({ error: { code: "CALL_BLOCKED" } });
+    expect(presence.stub.fetch).not.toHaveBeenCalled();
   });
 
   it("cancels a call through signaling and removes its pending presence invitation", async () => {

@@ -1,14 +1,16 @@
 // @vitest-environment jsdom
-import { act } from "react";
+import { act, StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const apiMock = vi.hoisted(() => vi.fn());
 const startOutgoing = vi.hoisted(() => vi.fn());
 const cancel = vi.hoisted(() => vi.fn());
+const route = vi.hoisted(() => ({ username: null as string | null }));
 const session = vi.hoisted(() => ({
   snapshot: { id: null as string | null, state: "IDLE" as string, role: null as "caller" | "callee" | null, durationMs: 0, muted: false, connectionState: "new", connectionMode: "unknown" as "unknown" | "p2p" | "turn", relayUnavailable: false, networkOnline: true, recoveryStatus: "idle" as "idle" | "reconnecting" | "recovered" | "failed" },
   controller: { startOutgoing, cancel, hangup: vi.fn(), toggleMute: vi.fn(), setAudioOutput: vi.fn() },
+  incoming: null as null | { callId: string },
   preferencesReady: true,
   preferenceLoadError: false,
   retryPreferences: vi.fn(),
@@ -21,7 +23,11 @@ const session = vi.hoisted(() => ({
 
 vi.mock("../lib/api", () => ({ api: apiMock }));
 vi.mock("../contexts/CallSession", () => ({ useCallSession: () => session }));
-vi.mock("react-router-dom", () => ({ useSearchParams: () => [new URLSearchParams("number=5551234")] }));
+vi.mock("react-router-dom", () => ({
+  Link: ({ children, to, ...props }: { children: React.ReactNode; to: string; className?: string }) => <a href={to} {...props}>{children}</a>,
+  useParams: () => ({ username: route.username ?? undefined }),
+  useSearchParams: () => [new URLSearchParams("number=5551234")],
+}));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("../components/common", () => ({
   PageHeader: () => <header />,
@@ -50,6 +56,8 @@ import DialerPage from "./DialerPage";
 afterEach(() => {
   document.body.innerHTML = "";
   session.snapshot = { id: null, state: "IDLE", role: null, durationMs: 0, muted: false, connectionState: "new", connectionMode: "unknown", relayUnavailable: false, networkOnline: true, recoveryStatus: "idle" };
+  session.incoming = null;
+  route.username = null;
   vi.clearAllMocks();
 });
 
@@ -101,6 +109,42 @@ describe("DialerPage outgoing cancellation", () => {
 
     expect(host.textContent).toContain("status.networkStates.offline");
     expect(host.textContent).toContain("status.recovery.reconnecting");
+    act(() => root.unmount());
+  });
+
+  it("automatically starts a username deep-link call once, including under StrictMode", async () => {
+    route.username = "Alice.Example";
+    apiMock.mockResolvedValue({ callId: "call-username", userId: "callee-1" });
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+
+    await act(async () => {
+      root.render(<StrictMode><DialerPage /></StrictMode>);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(apiMock).toHaveBeenCalledTimes(1);
+    expect(apiMock).toHaveBeenCalledWith("/api/calls", {
+      method: "POST",
+      body: JSON.stringify({ targetUsername: "Alice.Example" }),
+    });
+    expect(startOutgoing).toHaveBeenCalledWith("call-username", "callee-1");
+    expect(host.textContent).toContain("Alice.Example");
+    act(() => root.unmount());
+  });
+
+  it("does not auto-start a username link while another call is active", () => {
+    route.username = "Alice";
+    session.snapshot = { ...session.snapshot, id: "existing-call", state: "CONNECTED", role: "caller" };
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    act(() => root.render(<DialerPage />));
+
+    expect(apiMock).not.toHaveBeenCalled();
+    expect(host.textContent).toContain("errors.alreadyOnCall");
+    expect(host.textContent).toContain("actions.openCurrentCall");
     act(() => root.unmount());
   });
 });
