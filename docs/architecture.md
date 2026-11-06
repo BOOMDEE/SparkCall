@@ -2,7 +2,7 @@
 
 ## 请求与媒体路径
 
-浏览器通过同源 REST API 登录、管理账户和提交呼叫请求；Worker 校验会话、号码、黑名单及通话参与者后才访问 Durable Objects。信令 WebSocket 承载 SDP、ICE candidate 和通话状态，Durable Objects 使用 hibernation 与持久化邀请以支持在线状态和短时重连。WebRTC 媒体直接走 peer-to-peer；网络受限时使用 Cloudflare Realtime TURN。音频不会经过 Durable Objects，也不会由应用录制。
+浏览器通过同源 REST API 登录、管理账户和提交呼叫请求；Worker 校验会话、号码、黑名单及通话参与者后才访问 Durable Objects。信令 WebSocket 承载 SDP、ICE candidate 和通话状态，Durable Objects 使用 hibernation 与持久化邀请以支持在线状态和短时重连。Presence 邀请到期时以带状态条件的 D1 更新记录未接超时；已接听或已结束的呼叫不会被此更新覆盖。WebRTC 媒体直接走 peer-to-peer；网络受限时使用 Cloudflare Realtime TURN。音频不会经过 Durable Objects，也不会由应用录制。
 
 ```mermaid
 sequenceDiagram
@@ -39,18 +39,20 @@ sequenceDiagram
 
 用户偏好 PATCH 在单个浏览器会话内通过队列串行发送；D1 使用原子 JSON 合并并递增 `version`，每次写入返回该次提交后的偏好快照和版本。这样可以避免同一会话的响应乱序覆盖，并减少多个会话并发更新不同字段时的丢失更新。
 
+浏览器级免打扰和未接来电通知开关单独保存在按用户 ID 区分的版本化 `localStorage` 项中，不同步到 D1 或其他设备。免打扰只隐藏当前浏览器的来电弹窗，不代替服务端授权或自动拒接。启用通知后，打开的应用页面每 30 秒查询一次受认证的未接历史；浏览器原生通知仅在用户授权后尝试发送，并使用不含来电号码、姓名或通话 ID 的通用文案。没有 Service Worker/Push 订阅，因此关闭页面、浏览器休眠或断网时无法保证送达。
+
 公共通话记录默认私有。公开由所有者显式开启，可撤销、设定过期时间并更改 slug。公开内容不包含邮箱、内部 ID、会话或凭据；参与者姓名仅在参与者明确授权后展示。公开记录页面设置 `noindex, nofollow`。临时用户通过记录专用的 HttpOnly capability cookie 保留后续管理/撤销能力；该能力不使用可预测记录 ID。
 
 第三份迁移将记录所有者外键改为 `ON DELETE SET NULL`，并保留通话元数据快照，因此临时身份被清理后，独立 capability 仍可管理相应记录。此 Cookie 并不是跨设备恢复账号：丢失后可能无法恢复管理。自由备注与元数据值不具备自动个人信息脱敏能力，公开前必须审阅自行填写的内容。
 
 ## TURN 用量
 
-Worker 使用 Cloudflare Realtime 官方 GraphQL Analytics 查询 `egressBytes`，并以 `customIdentifier`（用户内部 ID）区分用户；活动临时账号也参与每小时最多 25 个用户的快照轮转。临时账号到期清理时，其用量快照随用户删除；管理员用户列表展示轮转快照，新账号可能要等到采样后才有估算值。采样数据可能延迟或不完整，因此接口标记 `authoritative: false`。管理员可为单个用户设置月度 egress 限额，也可批量应用到所有用户。只有在拿到可用估算且达到限额时才暂停新 TURN 凭据；采样或 Analytics 不可用时 fail-open，继续签发凭据。未强制 TURN 的通话仍可尝试 P2P；实际走 P2P 的媒体流量不计入 TURN egress。已经签发的凭据会持续到期，采样延迟也可能导致超额，因此该功能是尽力而为的中继闸门，不是硬性消费上限。`TURN_MONTHLY_QUOTA_BYTES` 仍只作为展示参考。分析 API token 仅存在于 Worker secret，不会返回浏览器。
+Worker 使用 Cloudflare Realtime 官方 GraphQL Analytics 查询 `egressBytes`，并按配置的 `TURN_KEY_ID` 限定在当前 SparkCall TURN key；逐用户分析再以 `customIdentifier` 区分用户。定时任务每小时轮转最多 25 个活动用户并将估算快照写入 D1。独立的 `TURN_PLATFORM_MONTHLY_LIMIT_BYTES` 为当前 TURN key 设定部署级月度阈值；采样达到阈值后仅拒绝新 TURN 凭据，成功 P2P 不计入，Analytics 缺失或不可用时 fail-open。采样数据可能延迟或不完整，因此接口标记 `authoritative: false`，也不能视为实时消费硬上限。`TURN_MONTHLY_QUOTA_BYTES` 仍只是展示配额。分析 API token 仅存在于 Worker secret，不会返回浏览器。
 
 ## 计划取舍与限制
 
-- Workers Web Crypto 不提供原生 Argon2id 派生函数；本实现使用 310,000 轮 PBKDF2-SHA-256，并保存版本标记，便于以后更换哈希方案。
+- Workers Web Crypto 不提供原生 Argon2id 派生函数，且拒绝超过 100,000 轮的 PBKDF2；本实现使用运行时支持的 100,000 轮 PBKDF2-SHA-256，并保存版本标记，便于以后更换哈希方案。
 - D1 原子计数是强制登录限流；KV 绑定未启用，因为当前没有非关键缓存需要它。
 - R2 用于头像或用户上传是可选能力，当前未启用。
 - 自动化检查包含类型检查、lint、前端与后端单元测试、生产构建及隔离的本地 Worker/D1 HTTP 集成测试；详见 [testing.md](testing.md)。真实浏览器跨 NAT 音频、并发/多设备行为、不同浏览器扬声器切换及远端 Durable Object 生命周期仍需另外验收。
-- 支付和 3DS 不属于本项目范围。生产部署目前暂停，不能把本地通过表述为已上线。
+- 支付和 3DS 不属于本项目范围。仓库有预发布公开预览，但不承诺生产 SLA 或跨网络音频验收；任何部署仍需授权维护者手动触发。

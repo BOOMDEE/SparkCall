@@ -32,11 +32,22 @@ async function createCall(request: Request, env: Env, ctx?: ExecutionContext): P
     return error("Too many call attempts; try again shortly", 429, "RATE_LIMITED");
   }
   const input = await body(request);
-  const identifier = String(input.number ?? input.targetNumber ?? "").trim();
-  if (!validDialNumber(identifier) && !validUsername(identifier)) return error("Enter a valid SparkCall number or username", 400, "INVALID_NUMBER");
-  const callee = (validDialNumber(identifier) ? await findByNumber(env.DB, identifier) : null)
-    ?? (validUsername(identifier) ? await findByUsername(env.DB, identifier) : null);
-  if (!callee) return error("SparkCall number or username not found", 404, "NUMBER_NOT_FOUND");
+  const number = String(input.number ?? input.targetNumber ?? "").trim();
+  if (input.targetUsername !== undefined && typeof input.targetUsername !== "string") {
+    return error("Enter a valid SparkCall username", 400, "INVALID_USERNAME");
+  }
+  const targetUsername = typeof input.targetUsername === "string" ? input.targetUsername.trim() : "";
+  if (targetUsername && number) return error("Choose a username or a number, not both", 400, "AMBIGUOUS_TARGET");
+  let callee;
+  if (targetUsername) {
+    if (!validUsername(targetUsername)) return error("Enter a valid SparkCall username", 400, "INVALID_USERNAME");
+    callee = await findByUsername(env.DB, targetUsername);
+    if (!callee) return error("SparkCall username not found", 404, "USERNAME_NOT_FOUND");
+  } else {
+    if (!validDialNumber(number)) return error("Enter a valid SparkCall number", 400, "INVALID_NUMBER");
+    callee = await findByNumber(env.DB, number);
+    if (!callee) return error("SparkCall number not found", 404, "NUMBER_NOT_FOUND");
+  }
   if (callee.id === caller.id) return error("You cannot call yourself", 400, "SELF_CALL");
   if (await isBlocked(env.DB, caller.id, callee.id) || await isBlocked(env.DB, callee.id, caller.id)) return error("This call is not allowed", 403, "CALL_BLOCKED");
   const preferences = await env.DB.prepare("SELECT settings_json FROM user_preferences WHERE user_id=?1").bind(callee.id).first<{ settings_json: string }>();

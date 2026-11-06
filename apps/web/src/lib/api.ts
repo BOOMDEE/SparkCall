@@ -56,7 +56,6 @@ export type Usage = {
   quotaBytes: number | null;
   remainingBytes: number | null;
   percentageUsed: number | null;
-  limitEnforced: boolean;
   lastUpdated: string | null;
   source: string;
   authoritative: boolean;
@@ -64,6 +63,7 @@ export type Usage = {
 };
 export type UserPreferences = {
   forceTurn: boolean;
+  connectionMode: "auto" | "p2p" | "turn";
   echoCancellation: boolean;
   noiseSuppression: boolean;
   autoGainControl: boolean;
@@ -109,3 +109,36 @@ export type IncomingCallInvite = {
   createdAt: number;
   expiresAt: number;
 };
+
+export type SiteConfiguration = {
+  branding: { productName: string; logoUrl: string; footerBadge: string; footerLicense: string };
+  usage: { showPublicAggregate: boolean; minimumAggregateUsers: number; allowUserBitrateSettings: boolean; monthlyUserQuotaBytes: number | null; monthlyTurnLimitBytes: number | null };
+  temporaryAccounts: {
+    enabled: boolean;
+    lifetimeHours: number;
+    maxActiveAccounts: number;
+    perIpCreationLimit: number;
+    perIpWindowMinutes: number;
+    monthlyTurnQuotaBytes: number | null;
+    monthlyTurnLimitBytes: number | null;
+    monthlyAggregateBudgetBytes: number | null;
+  };
+};
+
+export type PublicSiteConfiguration = Pick<SiteConfiguration, "branding"> & {
+  usage: Pick<SiteConfiguration["usage"], "showPublicAggregate" | "allowUserBitrateSettings">;
+  temporaryAccounts: Pick<SiteConfiguration["temporaryAccounts"], "enabled" | "lifetimeHours">;
+};
+
+export type PublicUsage = {
+  available: boolean;
+  month: string;
+  usedBytes: number | null;
+  lastUpdated: string | null;
+  source: string;
+  authoritative: false;
+  minimumUsersRequired: number;
+  note: string;
+};
+
+export type UserTurnPolicy = { limitBytes: number | null; displayQuotaBytes: number | null; hasIndividualOverride: boolean };

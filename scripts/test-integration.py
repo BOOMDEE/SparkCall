@@ -118,6 +118,25 @@ def test_websocket_sessions(origin, alice, bob, local_sql):
             socket.close()
 
 
+def test_public_usage_excludes_expired_users(anonymous, local_sql):
+    local_sql("INSERT INTO app_settings(key,value_json,updated_at) VALUES('site_configuration','{\"usage\":{\"showPublicAggregate\":true,\"minimumAggregateUsers\":5}}',strftime('%Y-%m-%dT%H:%M:%fZ','now')) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json,updated_at=excluded.updated_at")
+    for index in range(4):
+        user_id = f"public-active-{index}"
+        local_sql(f"INSERT INTO users(id,display_name,is_temporary,expires_at,created_at,updated_at) VALUES('{user_id}','Public active {index}',1,strftime('%Y-%m-%dT%H:%M:%fZ','now','+1 day'),strftime('%Y-%m-%dT%H:%M:%fZ','now'),strftime('%Y-%m-%dT%H:%M:%fZ','now'))")
+        local_sql(f"INSERT INTO usage_snapshots(id,user_id,month,bytes_used,quota_bytes,authoritative,captured_at) VALUES('snapshot-{index}','{user_id}',strftime('%Y-%m','now'),{index + 1},NULL,0,strftime('%Y-%m-%dT%H:%M:%fZ','now'))")
+    local_sql("INSERT INTO users(id,display_name,is_temporary,expires_at,created_at,updated_at) VALUES('public-expired-guest','Expired preview guest',1,strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 day'),strftime('%Y-%m-%dT%H:%M:%fZ','now','-2 day'),strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 day'))")
+    local_sql("INSERT INTO usage_snapshots(id,user_id,month,bytes_used,quota_bytes,authoritative,captured_at) VALUES('snapshot-expired','public-expired-guest',strftime('%Y-%m','now'),999999999,NULL,0,strftime('%Y-%m-%dT%H:%M:%fZ','now'))")
+
+    data, _ = anonymous.request("GET", "/api/usage/public")
+    assert data["available"] is False and data["usedBytes"] is None, "Expired accounts must not satisfy the public cohort threshold"
+
+    local_sql("INSERT INTO users(id,display_name,is_temporary,expires_at,created_at,updated_at) VALUES('public-active-4','Public active 4',1,strftime('%Y-%m-%dT%H:%M:%fZ','now','+1 day'),strftime('%Y-%m-%dT%H:%M:%fZ','now'),strftime('%Y-%m-%dT%H:%M:%fZ','now'))")
+    local_sql("INSERT INTO usage_snapshots(id,user_id,month,bytes_used,quota_bytes,authoritative,captured_at) VALUES('snapshot-4','public-active-4',strftime('%Y-%m','now'),5,NULL,0,strftime('%Y-%m-%dT%H:%M:%fZ','now'))")
+    data, _ = anonymous.request("GET", "/api/usage/public")
+    assert data["available"] is True and data["usedBytes"] == 15, "The public total must include only five active users and exclude expired usage"
+    print("PASS: public aggregate excludes expired users from both cohort and total.", flush=True)
+
+
 def run():
     assert WRANGLER.exists(), "Run npm ci first"
     assert (ROOT / "apps/web/dist/index.html").exists(), "Run npm run build first"
@@ -133,6 +152,7 @@ def run():
             "name": "sparkcall-integration",
             "main": str(ROOT / "workers/api/src/index.ts"),
             "compatibility_date": "2026-11-02",
+            "rules": [{"type": "Text", "globs": ["**/*.yaml"], "fallthrough": True}],
             "assets": {"directory": str(ROOT / "apps/web/dist"), "binding": "ASSETS", "not_found_handling": "single-page-application", "run_worker_first": ["/api/*", "/callrecords", "/callrecords/*"]},
             "d1_databases": [{"binding": "DB", "database_name": "sparkcall-integration", "database_id": "00000000-0000-0000-0000-000000000000", "migrations_dir": str(ROOT / "migrations")}],
             "durable_objects": {"bindings": [{"name": "SIGNALING", "class_name": "SparkCallDurableObject"}, {"name": "PRESENCE", "class_name": "SparkCallPresenceObject"}]},
@@ -167,12 +187,28 @@ def run():
             print("Testing real local HTTP routes...", flush=True)
             anonymous, alice, bob, guest = [Client(origin) for _ in range(4)]
             anonymous.request("GET", "/")
+            makecall_html, _ = anonymous.request("GET", "/makecall/Alice")
+            assert "<!doctype html>" in makecall_html.lower(), f"Expected SPA HTML for username call link, received {makecall_html[:150]!r}"
             html, headers = anonymous.request("GET", "/callrecords/private-meeting")
             assert "<!doctype html>" in html.lower(), f"Expected SPA HTML, received {html[:150]!r}"
             assert headers.get("X-Robots-Tag") == "noindex, nofollow"
             data, _ = anonymous.request("GET", "/api/session")
             assert data["authenticated"] is False
             anonymous.request("GET", "/api/me", status=401)
+            registered = Client(origin)
+            registered_username = f"registration-{secrets.token_hex(4)}"
+            registered_data, registered_headers = registered.request(
+                "POST",
+                "/api/auth/register",
+                {"username": registered_username, "password": PASSWORD, "displayName": "Integration Account"},
+                status=201,
+            )
+            assert registered_data["user"]["username"] == registered_username
+            assert registered_data["user"]["temporary"] is False
+            assert "HttpOnly" in registered_headers.get("Set-Cookie", "")
+            registered_login = Client(origin)
+            login_data, _ = registered_login.request("POST", "/api/auth/login", {"username": registered_username, "password": PASSWORD})
+            assert login_data["user"]["id"] == registered_data["user"]["id"]
             anonymous.request("POST", "/api/auth/guest", {}, status=403, origin="https://attacker.invalid")
             anonymous.request("POST", "/api/auth/guest", {}, status=403, omit_origin=True)
             anonymous.request("POST", "/api/calls", {"number": "Nobody"}, status=403, origin="https://attacker.invalid")
@@ -208,6 +244,9 @@ def run():
             bob.request("POST", "/api/blocked", {"number": "CaseNumber"})
             alice.request("POST", "/api/calls", {"number": "casenumber"}, status=403)
             bob.request("DELETE", "/api/blocked", {"number": "CaseNumber"})
+            username_call, _ = alice.request("POST", "/api/calls", {"targetUsername": "BOB"}, status=201)
+            assert username_call["userId"] == ids[1]
+            alice.request("POST", f"/api/calls/{username_call['callId']}/cancel", {})
             alice_secondary = Client(origin)
             alice_secondary.request("POST", "/api/auth/login", {"username": "alice", "password": PASSWORD})
             baseline, _ = alice.request("GET", "/api/settings/preferences")
@@ -265,6 +304,7 @@ def run():
             guest.request("DELETE", f"/api/records/{guest_record}")
             anonymous.request("GET", "/api/records/guest-owned", status=404)
             alice.request("GET", "/api/turn/credentials", status=503)
+            test_public_usage_excludes_expired_users(anonymous, local_sql)
             alice.request("POST", "/api/auth/logout", {})
             alice.request("GET", "/api/me", status=401)
             alice.request("POST", "/api/auth/login", {"username": "alice", "password": "incorrect"}, status=401)

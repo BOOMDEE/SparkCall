@@ -1,7 +1,8 @@
 import type { Env } from "./env";
 import { base64url, bytes, error, hex, id, now } from "./database";
 
-const PBKDF2_ITERATIONS = 310_000;
+/** Cloudflare Workers Web Crypto rejects PBKDF2 counts above 100,000. */
+const PBKDF2_ITERATIONS = 100_000;
 const SESSION_COOKIE = "sc_session";
 const SESSION_MAX = 60 * 60 * 24 * 30;
 
@@ -59,7 +60,7 @@ export async function verifyPassword(password: string, stored: string) {
   const parts = stored.split("$");
   if (parts.length !== 5 || parts[0] !== "pbkdf2-sha256" || parts[1] !== "v1") return false;
   const iterations = Number(parts[2]);
-  if (!Number.isSafeInteger(iterations) || iterations < 100_000 || iterations > 1_000_000) return false;
+  if (!Number.isSafeInteger(iterations) || iterations < 100_000 || iterations > PBKDF2_ITERATIONS) return false;
   try {
     const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveBits"]);
     const bits = new Uint8Array(await crypto.subtle.deriveBits({ name: "PBKDF2", salt: fromB64(parts[3]!), iterations, hash: "SHA-256" }, key, 256));
@@ -86,10 +87,10 @@ export function sessionCookie(token: string, maxAge: number) {
 export const clearSessionCookie = () => `${SESSION_COOKIE}=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Lax`;
 export const newToken = () => b64(bytes(32));
 
-export async function createSession(env: Env, userId: string, temporary: boolean) {
+export async function createSession(env: Env, userId: string, temporary: boolean, ttlOverride?: number) {
   const token = newToken();
   const configured = Number(temporary ? env.TEMP_SESSION_TTL_SECONDS : env.SESSION_TTL_SECONDS);
-  const ttl = Math.max(300, Math.min(SESSION_MAX, configured || (temporary ? 86_400 : SESSION_MAX)));
+  const ttl = Math.max(300, Math.min(SESSION_MAX, (ttlOverride ?? configured) || (temporary ? 86_400 : SESSION_MAX)));
   await env.DB.prepare("INSERT INTO sessions (id, user_id, token_hash, expires_at, created_at) VALUES (?1, ?2, ?3, datetime('now', ?4), ?5)")
     .bind(id(), userId, await hashToken(token), `+${ttl} seconds`, now()).run();
   return { token, ttl };

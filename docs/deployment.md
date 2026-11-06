@@ -7,7 +7,7 @@
 - 自定义域名：由 `SPARKCALL_HOSTNAME` 提供，必须属于当前 Cloudflare 账号中的活动 Zone
 - Wrangler 配置：仓库根目录 `wrangler.jsonc`，其中 D1 UUID 和域名是安全占位值
 
-当前仅完成代码与本地验证工作；生产部署保持暂停。以下步骤是未来经维护者决定发布时使用的操作指南，不表示已上线。
+仓库已有预发布公开预览，且没有生产 SLA 或真实跨网络音频验收承诺。以下步骤描述后续手动部署流程；自动部署保持关闭，每次发布仍需项目所有者明确批准。
 
 ## 一次性准备
 
@@ -17,12 +17,18 @@
    - `TURN_KEY_ID`：Cloudflare Realtime TURN key 的 UID。
    - `TURN_API_TOKEN`：TURN key 创建后返回的一次性 key；仅保存在 Worker secret 中。
    - `SPARKCALL_WEBHOOK_ENCRYPTION_KEY`：用于加密 incoming-call webhook URL 的 32-byte 随机密钥，以 Base64 文本保存（可用 `openssl rand -base64 32` 生成）。
-   - `TURN_ANALYTICS_API_TOKEN`：可选的 Account Analytics Read token，用于 GraphQL Realtime 用量统计。
-3. 设置非敏感 Worker variables：`CLOUDFLARE_ACCOUNT_ID`、`TURN_MONTHLY_QUOTA_BYTES`，可选 `ADMIN_USER_IDS`、`SESSION_TTL_SECONDS` 和 `TEMP_SESSION_TTL_SECONDS`。`ADMIN_USER_IDS` 是逗号分隔的 SparkCall 内部 user ID。
-4. 在 GitHub Actions repository variables 中设置非敏感的 `D1_DATABASE_ID` 与 `SPARKCALL_HOSTNAME`。手动部署工作流会在临时 runner 中替换安全占位值；这两个值不应写进 Git。
-5. 仅当项目所有者批准并手动 dispatch `api-token` 模式时，才将 `CLOUDFLARE_ACCOUNT_ID` 和最小权限 `CLOUDFLARE_API_TOKEN` 配置为仓库 Actions secrets；不要把 token 写入 YAML。
+   - `TURN_ANALYTICS_API_TOKEN`：管理员 Cloudflare 用量与 TURN 限额检查所需的 Cloudflare API token；仅授予目标账号 **Account Analytics Read**，Analytics 查询按 `TURN_KEY_ID` 过滤，不要扩大权限。
+3. 设置非敏感 Worker variables：`CLOUDFLARE_ACCOUNT_ID`、`ADMIN_USER_IDS`、`TURN_MONTHLY_QUOTA_BYTES` 和 `TURN_PLATFORM_MONTHLY_LIMIT_BYTES`，以及可选的 `SESSION_TTL_SECONDS` 和 `TEMP_SESSION_TTL_SECONDS`。本部署的 `TURN_PLATFORM_MONTHLY_LIMIT_BYTES` 为 `800000000000`（800 十进制 GB/UTC 自然月）。`ADMIN_USER_IDS` 是逗号分隔的 SparkCall 内部 user ID；未配置或未匹配时，所有管理员接口 fail-closed。
+4. 在 GitHub Actions repository variables 中设置非敏感的 `D1_DATABASE_ID`、`SPARKCALL_HOSTNAME` 与 `ADMIN_USER_IDS`。正常发布要求 `ADMIN_USER_IDS`；仅一次性注册 bootstrap 可暂时留空。手动部署工作流会在临时 runner 中替换安全占位值；这些值不应写进 Git。
+5. `deploy.yml` 从 `CLOUDFLARE_ACCOUNT_ID` Actions secret 及 `ADMIN_USER_IDS` repository variable 注入非秘密 Worker variables；同一 account ID 也用于部署定位。仅当项目所有者批准并手动 dispatch `api-token` 模式时，才配置最小权限 `CLOUDFLARE_API_TOKEN` Actions secret；不要把 token 写入 YAML。
 
-TURN analytics token 与 TURN key 是不同凭据。未配置 analytics token 时，通话服务仍可签发 TURN credentials，但月度用量面板显示“未配置”。
+TURN Analytics token 与 TURN key 是不同凭据。未配置 Analytics token 或 TURN key ID 时，通话服务仍可签发 TURN credentials，但项目级用量不可用；若配置了 TURN 执行限额，缺少可用采样时会 fail-open，仍允许新凭据并可能超额。平台总限额只过滤当前配置的 `TURN_KEY_ID`，不计同账号其他 TURN key；若其他应用共用此 key，其流量会一并计入。正常发布预检要求 Analytics Worker Secret 已存在；下面记录的一次性注册 bootstrap 是唯一例外。
+
+## 一次性注册 bootstrap
+
+`deploy.yml` 的 `bootstrap_registration` 默认关闭。只有为修复注册而进行的一次手动发布才可打开，并且必须同时选择 `auth_method=device`；工作流会拒绝 API-token 模式，也要求 repository variable `ADMIN_USER_IDS` 为空。它仅跳过 `TURN_ANALYTICS_API_TOKEN` 名称预检，其余必需 Worker secrets、测试、D1 migrations 和人工 Cloudflare device authorization 仍照常执行。它不会创建或扩大任何 Cloudflare API token 权限。
+
+部署时 Worker 的管理员 allowlist 为空，因此所有管理员 API 继续 fail-closed；Cloudflare 账号级用量不可用，且任何已启用的 TURN 执行限额在采样不可用时 fail-open。公开账号级用量仍默认关闭。注册成功后，先把新账号的内部 user ID 写入 `ADMIN_USER_IDS`，再通过安全方式配置一个已有且仅有 **Account Analytics Read** 权限的 `TURN_ANALYTICS_API_TOKEN`；随后执行正常发布。bootstrap 完成后应移除该临时发布例外，不能把它当作常规部署模式。
 
 ## 首次部署 bootstrap
 
@@ -56,11 +62,11 @@ npx wrangler deploy
 
 - `test.yml`：push、PR 和手动运行质量门禁，以及隔离本地 D1/HTTP/WebSocket 集成测试。
 - `preview.yml`：对 PR 运行质量门禁并上传前端构建产物，供审阅下载；默认不公开部署未审阅代码。
-- `deploy.yml`：仅支持明确的手动 workflow dispatch，可选择 `api-token` 或 `device`；没有 push 触发器，也不会因设置仓库变量而自动部署。device 模式会在日志中显示 Cloudflare verification URL/code，操作人需打开链接并批准，工作流随后继续运行。
+- `deploy.yml`：仅支持明确的手动 workflow dispatch，可选择 `api-token` 或 `device`；没有 push 触发器，也不会因设置仓库变量而自动部署。`bootstrap_registration` 默认关闭，只有一次性注册修复可打开，且强制 device 模式。device 模式会在日志中显示 Cloudflare verification URL/code，操作人需打开链接并批准，工作流随后继续运行。
 
-**生产部署目前保持暂停。** 只有项目所有者明确批准后，授权操作员才应手动启动工作流。若使用 API token，保持最小权限并仅作为 GitHub Actions secret；部署工作流会先运行质量检查和 `npm run test:integration`，全部成功后才允许认证、应用远端 D1 migrations 并部署 Worker 与静态资源。
+**公开预览不等于生产验收。** 只有项目所有者明确批准后，授权操作员才应手动启动工作流。若使用 API token，保持最小权限并仅作为 GitHub Actions secret；部署工作流会先运行质量检查和 `npm run test:integration`，全部成功后才允许认证、应用远端 D1 migrations 并部署 Worker 与静态资源。
 
-在远端迁移或部署前，工作流会只读列出目标 Worker 上的 secret 名称，并确认 `INTERNAL_SIGNALING_TOKEN`、`TURN_KEY_ID`、`TURN_API_TOKEN` 和 `SPARKCALL_WEBHOOK_ENCRYPTION_KEY` 已配置。预检不会读取、打印或传输 secret 值；缺失任一名称即停止。该预检不替代对 Worker 运行行为的实际验证。
+在远端迁移或部署前，工作流会只读列出目标 Worker 上的 secret 名称，并确认 `INTERNAL_SIGNALING_TOKEN`、`TURN_KEY_ID`、`TURN_API_TOKEN` 和 `SPARKCALL_WEBHOOK_ENCRYPTION_KEY` 已配置；正常发布还要求 `TURN_ANALYTICS_API_TOKEN`。仅当一次性注册 bootstrap 被显式选中时，才允许暂缺 Analytics secret。预检不会读取、打印或传输 secret 值；缺失其他必需名称即停止。该预检不替代对 Worker 运行行为的实际验证。
 
 所有第三方 Actions 都固定到已核对的官方完整提交 SHA，而非可变的 `@v4` 标签：[checkout](https://github.com/actions/checkout/commit/11d5960a326750d5838078e36cf38b85af677262)、[setup-node](https://github.com/actions/setup-node/commit/49933ea5288caeca8642d1e84afbd3f7d6820020)、[upload-artifact](https://github.com/actions/upload-artifact/commit/ea165f8d65b6e75b540449e92b4886f43607fa02)。升级时应核对官方来源并审阅差异后更新 SHA。
 
@@ -70,7 +76,7 @@ npx wrangler deploy
 2. 创建两个测试账号，在真实设备上验证自定义号码、联系人、黑名单、接听/拒接/取消及通话结束。
 3. 通过不同网络（尤其蜂窝网与 NAT 后网络）验证 TURN fallback；只在 Worker secret 已正确设置后测试。
 4. 检查通话记录默认私有、显式公开/撤销、过期和临时账号 capability cookie；不要用真实敏感内容做公开测试。
-5. 在 Cloudflare Worker 日志确认无 secret 或 session token 输出。TURN Analytics 数据是估算值，不应视为账单最终值；TURN 费用按 Cloudflare Realtime 的实际计费规则（包括中继 egress 等适用项目）产生，`TURN_MONTHLY_QUOTA_BYTES` 仅是界面展示配额，不是硬性消费上限或自动阻断器。
+5. 在 Cloudflare Worker 日志确认无 secret 或 session token 输出。TURN Analytics 数据是估算值，不应视为账单最终值；TURN 费用按 Cloudflare Realtime 的实际计费规则（包括中继 egress 等适用项目）产生。`TURN_MONTHLY_QUOTA_BYTES` 仅用于界面展示；`TURN_PLATFORM_MONTHLY_LIMIT_BYTES` 按当前 TURN key 的 egress 样本阻止后续新 TURN 凭据分配，但会因 Analytics 延迟而超额，Analytics 不可用时 fail-open，且不会中断现有通话；成功 P2P 直连不计入。
 
 ## 回滚与数据库
 

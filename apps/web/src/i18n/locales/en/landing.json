@@ -23,7 +23,7 @@
     },
     "temporary": {
       "title": "Temporary access",
-      "detail": "Temporary identities expire after 24 hours. Microphone permission and a working call configuration are required."
+      "detail": "Temporary identities expire after {{lifetimeHours}} hours. Microphone permission and a working call configuration are required."
     }
   },
   "errors": {

@@ -1,7 +1,8 @@
 import type { Env } from "./env";
 import { authenticate, clearSessionCookie, createSession, hashPassword, hashToken, newToken, requireAuth, revokeSession, sessionCookie, verifyPassword, rateLimit } from "./auth";
 import { body, error, findByNumber, findUser, id, json, now, publicUser, text, validDialNumber, validNumber, validSlug, validUsername } from "./database";
-import { getPlatformTurnUsage, getUserTurnQuota, getUserTurnUsage } from "./turn";
+import { getPlatformTurnLimitStatus, getPlatformTurnUsage, getPublicTurnUsage, getTemporaryTurnUsage, getUserTurnUsage } from "./turn";
+import { getSiteConfiguration, getUserTurnPolicy, publicSiteConfiguration, temporaryAggregateBudgetBytes, validateAdminConfigurationPatch } from "./configuration";
 import { saveWebhook, validateResolvedHost, validateWebhookUrl, webhookConfigured } from "./webhook";
 
 const METHODS = new Set(["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]);
@@ -14,6 +15,7 @@ const DEFAULT_PREFERENCES = {
   audioOutputDeviceId: "",
   bitrateMode: "standard",
   bitrateKbps: 32,
+  connectionMode: "auto",
   allowIncoming: true,
   forceTurn: false,
   showOnlineStatus: true,
@@ -44,19 +46,27 @@ function csrf(request: Request, env: Env) {
   try { return origin === (env.ALLOWED_ORIGIN || new URL(request.url).origin); } catch { return false; }
 }
 
-function isAdmin(user: { id: string }, env: Env) {
-  return new Set((env.ADMIN_USER_IDS || "").split(",").map((value) => value.trim()).filter(Boolean)).has(user.id);
-}
-
-function quotaBytesFromGb(value: unknown): number | null | undefined {
-  if (value === null || value === 0) return null;
-  if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 10_000) return undefined;
-  const bytes = Math.round(value * 1_000_000_000);
-  return Number.isSafeInteger(bytes) && bytes > 0 ? bytes : undefined;
+async function requireAdmin(request: Request, env: Env) {
+  const user = await requireAuth(request, env);
+  const admins = new Set((env.ADMIN_USER_IDS || "").split(",").map((value) => value.trim()).filter(Boolean));
+  if (!admins.has(user.id)) throw error("Not found", 404, "NOT_FOUND");
+  return user;
 }
 
 function isReserved(value: string) {
   return RESERVED.has(value.toLowerCase());
+}
+
+function resolvedPreferences(value: Record<string, unknown>, allowUserBitrateSettings: boolean) {
+  const preferences = { ...DEFAULT_PREFERENCES, ...value };
+  if (typeof value.connectionMode !== "string" && value.forceTurn === true) preferences.connectionMode = "turn";
+  if (preferences.connectionMode === "turn") preferences.forceTurn = true;
+  else if (preferences.connectionMode === "auto" || preferences.connectionMode === "p2p") preferences.forceTurn = false;
+  if (!allowUserBitrateSettings) {
+    preferences.bitrateMode = "standard";
+    preferences.bitrateKbps = 32;
+  }
+  return preferences;
 }
 
 function parseArray(value: unknown, maxItems: number, maxLength: number): string[] {
@@ -95,6 +105,36 @@ function expiredAt(value: unknown): string | null | undefined {
   const millis = Date.parse(value);
   if (!Number.isFinite(millis) || millis <= Date.now()) return undefined;
   return new Date(millis).toISOString();
+}
+
+function parseTurnLimitBytes(value: unknown): number | null | undefined {
+  if (value === null) return null;
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0 || value > 1_000_000_000_000_000) return undefined;
+  return value;
+}
+
+async function auditAdminAction(env: Env, actorId: string, action: string, targetScope: string, affectedCount: number) {
+  await env.DB.prepare("INSERT INTO admin_audit(id,actor_user_id,action,target_scope,affected_count,created_at) VALUES(?1,?2,?3,?4,?5,?6)")
+    .bind(id(), actorId, action, targetScope, affectedCount, now()).run();
+}
+
+function exportedPreferences(value: unknown): Record<string, unknown> {
+  const source = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  const result: Record<string, unknown> = {};
+  for (const key of ["echoCancellation", "noiseSuppression", "autoGainControl", "allowIncoming", "showOnlineStatus"] as const) {
+    if (typeof source[key] === "boolean") result[key] = source[key];
+  }
+  if (source.bitrateMode === "low" || source.bitrateMode === "standard" || source.bitrateMode === "high" || source.bitrateMode === "custom") result.bitrateMode = source.bitrateMode;
+  if (Number.isInteger(source.bitrateKbps) && Number(source.bitrateKbps) >= 6 && Number(source.bitrateKbps) <= 128) result.bitrateKbps = Number(source.bitrateKbps);
+  if (source.connectionMode === "auto" || source.connectionMode === "p2p" || source.connectionMode === "turn") result.connectionMode = source.connectionMode;
+  else if (source.forceTurn === true) result.connectionMode = "turn";
+  if (source.theme === "light" || source.theme === "dark" || source.theme === "system") result.theme = source.theme;
+  return result;
+}
+
+async function exportUserRef(userId: string): Promise<string> {
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`sparkcall-config-export-v1:${userId}`)));
+  return [...digest].map((value) => value.toString(16).padStart(2, "0")).join("");
 }
 
 async function newTempNumber(env: Env) {
@@ -182,6 +222,9 @@ async function route(request: Request, env: Env): Promise<Response> {
   if (!path.startsWith("/api/")) return error("Not found", 404, "NOT_FOUND");
   if (method !== "GET" && !csrf(request, env)) return error("Cross-site request rejected", 403, "CSRF");
 
+  if (path === "/api/config" && method === "GET") {
+    return json(publicSiteConfiguration(await getSiteConfiguration(env)));
+  }
   if (path === "/api/session" && method === "GET") {
     const user = await authenticate(request, env);
     return json({ authenticated: !!user, user: user ? publicUser(user) : null });
@@ -209,16 +252,24 @@ async function route(request: Request, env: Env): Promise<Response> {
     return json({ user: publicUser(user) }, 200, { "set-cookie": sessionCookie(session.token, session.ttl) });
   }
   if (path === "/api/auth/guest" && method === "POST") {
+    const configuration = await getSiteConfiguration(env);
+    if (!configuration.temporaryAccounts.enabled) return error("Temporary accounts are disabled by the administrator", 403, "TEMPORARY_ACCOUNTS_DISABLED");
     const ip = request.headers.get("CF-Connecting-IP") || "unknown";
-    if (!await rateLimit(env, `guest:${ip}`, 8, 3600)) return error("Too many temporary accounts from this network", 429, "RATE_LIMITED");
+    const { perIpCreationLimit, perIpWindowMinutes, lifetimeHours, maxActiveAccounts } = configuration.temporaryAccounts;
+    if (perIpCreationLimit > 0 && !await rateLimit(env, `guest:${ip}`, perIpCreationLimit, perIpWindowMinutes * 60)) {
+      return error("Temporary account creation limit reached for this network; try again later", 429, "RATE_LIMITED");
+    }
     const userId = id();
     const number = await newTempNumber(env);
     const timestamp = now();
-    await env.DB.prepare(`
+    const inserted = await env.DB.prepare(`
       INSERT INTO users(id,display_name,number,is_temporary,expires_at,created_at,updated_at)
-      VALUES(?1,?2,?3,1,datetime('now','+24 hours'),?4,?4)
-    `).bind(userId, `Guest ${number.slice(-6)}`, number, timestamp).run();
-    const session = await createSession(env, userId, true);
+      SELECT ?1,?2,?3,1,datetime('now',?4),?5,?5
+      WHERE ?6=0 OR (SELECT COUNT(*) FROM users WHERE is_temporary=1 AND expires_at IS NOT NULL
+        AND julianday(expires_at)>julianday('now')) < ?6
+    `).bind(userId, `Guest ${number.slice(-6)}`, number, `+${lifetimeHours} hours`, timestamp, maxActiveAccounts).run();
+    if (!inserted.meta?.changes) return error("Temporary account capacity is full; try again later", 429, "TEMPORARY_CAPACITY_REACHED");
+    const session = await createSession(env, userId, true, lifetimeHours * 3600);
     return json({ user: publicUser(await findUser(env.DB, userId)) }, 201, { "set-cookie": sessionCookie(session.token, session.ttl) });
   }
   if (path === "/api/auth/logout" && method === "POST") {
@@ -254,16 +305,26 @@ async function route(request: Request, env: Env): Promise<Response> {
 
   if (path === "/api/settings/preferences" && method === "GET") {
     const user = await requireAuth(request, env);
+    const configuration = await getSiteConfiguration(env);
     const row = await env.DB.prepare("SELECT settings_json, version FROM user_preferences WHERE user_id=?1").bind(user.id).first<{ settings_json: string; version: number }>();
-    return json({ preferences: { ...DEFAULT_PREFERENCES, ...(row ? JSON.parse(row.settings_json) : {}) }, version: row?.version ?? 0 });
+    const stored = row ? JSON.parse(row.settings_json) as Record<string, unknown> : {};
+    return json({ preferences: resolvedPreferences(stored, configuration.usage.allowUserBitrateSettings), version: row?.version ?? 0 });
   }
   if (path === "/api/settings/preferences" && method === "PATCH") {
     const user = await requireAuth(request, env);
     const input = await body(request);
+    const configuration = await getSiteConfiguration(env);
+    if (!configuration.usage.allowUserBitrateSettings && (Object.hasOwn(input, "bitrateMode") || Object.hasOwn(input, "bitrateKbps"))) {
+      return error("User bitrate settings are disabled by the administrator", 403, "BITRATE_SETTINGS_DISABLED");
+    }
     const patch: Record<string, unknown> = {};
     for (const key of ["echoCancellation", "noiseSuppression", "autoGainControl", "allowIncoming", "showOnlineStatus", "forceTurn"] as const) {
       if (typeof input[key] === "boolean") patch[key] = input[key];
     }
+    if (input.connectionMode === "auto" || input.connectionMode === "p2p" || input.connectionMode === "turn") {
+      patch.connectionMode = input.connectionMode;
+      patch.forceTurn = input.connectionMode === "turn";
+    } else if (typeof input.forceTurn === "boolean") patch.connectionMode = input.forceTurn ? "turn" : "auto";
     for (const key of ["audioInputDeviceId", "audioOutputDeviceId"] as const) {
       if (typeof input[key] === "string" && input[key].length <= 256) patch[key] = input[key];
     }
@@ -279,7 +340,8 @@ async function route(request: Request, env: Env): Promise<Response> {
         version=user_preferences.version + 1
       RETURNING settings_json, version
     `).bind(user.id, JSON.stringify(patch), timestamp).first<{ settings_json: string; version: number }>();
-    const preferences: Record<string, unknown> = { ...DEFAULT_PREFERENCES, ...(row ? JSON.parse(row.settings_json) : {}) };
+    const stored = row ? JSON.parse(row.settings_json) as Record<string, unknown> : {};
+    const preferences = resolvedPreferences(stored, configuration.usage.allowUserBitrateSettings);
     return json({ preferences, version: row?.version ?? 1 });
   }
 
@@ -522,69 +584,186 @@ async function route(request: Request, env: Env): Promise<Response> {
   }
 
   if (path === "/api/blocked" && method === "DELETE") return error("Use the blocked-list endpoint with a number", 400);
-  if (path === "/api/usage" && method === "GET") {
-    const user = await requireAuth(request, env);
-    return json(await getUserTurnUsage(env, user.id));
+  if (path === "/api/admin/config") {
+    const admin = await requireAdmin(request, env);
+    if (method === "GET") return json({ configuration: await getSiteConfiguration(env) });
+    if (method === "DELETE") {
+      await env.DB.batch([
+        env.DB.prepare("DELETE FROM app_settings WHERE key=?1").bind("site_configuration"),
+        env.DB.prepare("INSERT INTO admin_audit(id,actor_user_id,action,target_scope,affected_count,created_at) VALUES(?1,?2,'site_configuration_reset','site',1,?3)")
+          .bind(id(), admin.id, now()),
+      ]);
+      return json({ configuration: await getSiteConfiguration(env), reset: true });
+    }
+    if (method === "PATCH") {
+      const input = await body(request);
+      let patch: ReturnType<typeof validateAdminConfigurationPatch>;
+      try { patch = validateAdminConfigurationPatch(input.configuration); }
+      catch (cause) { return error(cause instanceof Error ? cause.message : "Invalid configuration", 400, "INVALID_CONFIGURATION"); }
+      await env.DB.batch([
+        env.DB.prepare(`
+        INSERT INTO app_settings(key,value_json,updated_at) VALUES(?1,?2,?3)
+        ON CONFLICT(key) DO UPDATE SET value_json=json_patch(app_settings.value_json,excluded.value_json),updated_at=excluded.updated_at
+        `).bind("site_configuration", JSON.stringify(patch), now()),
+        env.DB.prepare("INSERT INTO admin_audit(id,actor_user_id,action,target_scope,affected_count,created_at) VALUES(?1,?2,'site_configuration_update','site',1,?3)")
+          .bind(id(), admin.id, now()),
+      ]);
+      return json({ configuration: await getSiteConfiguration(env) });
+    }
+    return error("Method not allowed", 405, "METHOD_NOT_ALLOWED");
   }
-  if (path === "/api/admin/quotas" && method === "GET") {
-    const user = await requireAuth(request, env);
-    if (!isAdmin(user, env)) return error("Not found", 404, "NOT_FOUND");
-    const month = new Date().toISOString().slice(0, 7);
-    const rows = await env.DB.prepare(`
-      SELECT u.id,u.username,u.display_name,u.number,u.is_temporary,u.expires_at,
-        u.turn_monthly_quota_bytes,s.bytes_used,s.captured_at
-      FROM users u LEFT JOIN usage_snapshots s ON s.user_id=u.id AND s.month=?1
-      ORDER BY COALESCE(u.username,u.display_name) COLLATE NOCASE,u.id LIMIT 1000
-    `).bind(month).all<any>();
-    const defaultQuota = Number(env.TURN_MONTHLY_QUOTA_BYTES);
+  if (path === "/api/admin/users" && method === "GET") {
+    await requireAdmin(request, env);
+    const cursor = url.searchParams.get("after");
+    if (cursor && !/^[A-Za-z0-9-]{1,80}$/.test(cursor)) return error("Invalid user cursor", 400, "INVALID_CURSOR");
+    const limit = Math.max(1, Math.min(250, Number(url.searchParams.get("limit")) || 100));
+    const counts = await env.DB.prepare(`
+      SELECT COUNT(*) AS total,
+        COALESCE(SUM(CASE WHEN is_temporary=1 THEN 1 ELSE 0 END),0) AS temporary,
+        COALESCE(SUM(CASE WHEN is_temporary=0 THEN 1 ELSE 0 END),0) AS permanent
+      FROM users WHERE expires_at IS NULL OR julianday(expires_at)>julianday('now')
+    `).first<{ total: number; temporary: number; permanent: number }>();
+    const page = await env.DB.prepare(`
+      SELECT u.id,u.username,u.display_name,u.is_temporary,s.monthly_turn_limit_bytes
+      FROM users u LEFT JOIN user_settings s ON s.user_id=u.id
+      WHERE (u.expires_at IS NULL OR julianday(u.expires_at)>julianday('now')) AND (?1 IS NULL OR u.id>?1)
+      ORDER BY u.id LIMIT ?2
+    `).bind(cursor, limit).all<{ id: string; username: string | null; display_name: string; is_temporary: number; monthly_turn_limit_bytes: number | null }>();
+    const rows = page.results;
     return json({
-      month,
-      defaultQuotaBytes: Number.isSafeInteger(defaultQuota) && defaultQuota > 0 ? defaultQuota : null,
-      users: rows.results.map((row) => ({
-        id: row.id,
-        username: row.username ?? null,
-        displayName: row.display_name,
-        number: row.number ?? null,
-        temporary: !!row.is_temporary,
-        expiresAt: row.expires_at ?? null,
-        quotaBytes: row.turn_monthly_quota_bytes == null ? null : Number(row.turn_monthly_quota_bytes),
-        usedBytes: row.bytes_used == null ? null : Number(row.bytes_used),
-        lastUpdated: row.captured_at ?? null,
-      })),
+      users: rows.map((row) => ({ id: row.id, username: row.username, displayName: row.display_name, temporary: !!row.is_temporary, monthlyTurnLimitBytesOverride: row.monthly_turn_limit_bytes === null ? null : Number(row.monthly_turn_limit_bytes) })),
+      nextCursor: rows.length === limit ? rows[rows.length - 1]?.id ?? null : null,
+      totalUsers: Number(counts?.total ?? 0), temporaryUsers: Number(counts?.temporary ?? 0), permanentUsers: Number(counts?.permanent ?? 0),
     });
   }
-  if (path === "/api/admin/quotas" && method === "PATCH") {
-    const user = await requireAuth(request, env);
-    if (!isAdmin(user, env)) return error("Not found", 404, "NOT_FOUND");
+  if (path === "/api/admin/users/export" && method === "GET") {
+    const admin = await requireAdmin(request, env);
+    const rows = await env.DB.prepare(`
+      SELECT u.id,u.is_temporary,p.settings_json,s.monthly_turn_limit_bytes
+      FROM users u LEFT JOIN user_preferences p ON p.user_id=u.id LEFT JOIN user_settings s ON s.user_id=u.id
+      WHERE u.expires_at IS NULL OR julianday(u.expires_at)>julianday('now')
+      ORDER BY u.id
+    `).all<{ id: string; is_temporary: number; settings_json: string | null; monthly_turn_limit_bytes: number | null }>();
+    const generatedAt = now();
+    const users = await Promise.all(rows.results.map(async (row) => {
+      const stored: unknown = (() => { try { return row.settings_json ? JSON.parse(row.settings_json) : {}; } catch { return {}; } })();
+      return {
+        userRef: await exportUserRef(row.id),
+        temporary: !!row.is_temporary,
+        monthlyTurnLimitBytesOverride: row.monthly_turn_limit_bytes === null ? null : Number(row.monthly_turn_limit_bytes),
+        preferences: exportedPreferences(stored),
+      };
+    }));
+    await auditAdminAction(env, admin.id, "user_configuration_export", "all_active_users", users.length);
+    return json({ schemaVersion: 1, generatedAt, note: "Configuration-only export. User references are pseudonymous; device identifiers, names, usernames, phone numbers, passwords, sessions, and tokens are excluded.", users }, 200, {
+      "content-disposition": 'attachment; filename="sparkcall-user-config-export.json"',
+    });
+  }
+  if (path === "/api/admin/users/batch-turn-limit" && method === "POST") {
+    const admin = await requireAdmin(request, env);
     const input = await body(request);
-    const quotaBytes = quotaBytesFromGb(input.quotaGb);
-    if (quotaBytes === undefined) return error("Quota must be from 0 to 10,000 GB per month", 400, "INVALID_QUOTA");
-    if (input.applyToAll === true) {
-      const result = await env.DB.prepare("UPDATE users SET turn_monthly_quota_bytes=?1,updated_at=?2")
-        .bind(quotaBytes, now()).run();
-      return json({ ok: true, updated: result.meta?.changes ?? null });
-    }
-    const userId = text(input.userId, 128);
-    if (!userId) return error("A user ID is required", 400, "INVALID_USER");
-    const target = await env.DB.prepare("SELECT id FROM users WHERE id=?1").bind(userId).first();
+    if (input.scope !== "all" && input.scope !== "temporary") return error("Scope must be all or temporary", 400, "INVALID_SCOPE");
+    const bytes = parseTurnLimitBytes(input.monthlyTurnLimitBytes);
+    if (bytes === undefined) return error("Monthly TURN limit must be null or an integer byte value from 0 to 1000000000000000", 400, "INVALID_TURN_LIMIT");
+    if (typeof input.expectedCount !== "number" || !Number.isSafeInteger(input.expectedCount) || input.expectedCount < 0) return error("An expected target count is required", 400, "INVALID_TARGET_COUNT");
+    const where = input.scope === "temporary"
+      ? "is_temporary=1 AND (expires_at IS NULL OR julianday(expires_at)>julianday('now'))"
+      : "(expires_at IS NULL OR julianday(expires_at)>julianday('now'))";
+    const count = await env.DB.prepare(`SELECT COUNT(*) AS total FROM users WHERE ${where}`).first<{ total: number }>();
+    const affectedCount = Number(count?.total ?? 0);
+    if (affectedCount !== input.expectedCount) return json({ error: { code: "TARGET_COUNT_CHANGED", message: "The user count changed. Refresh the preview before applying.", currentCount: affectedCount } }, 409);
+    const auditId = id();
+    const timestamp = now();
+    const action = bytes === null ? "users_batch_turn_limit_clear" : "users_batch_turn_limit_set";
+    const audit = env.DB.prepare(`INSERT INTO admin_audit(id,actor_user_id,action,target_scope,affected_count,created_at)
+      SELECT ?1,?2,?3,?4,?5,?6 WHERE (SELECT COUNT(*) FROM users WHERE ${where})=?7`)
+      .bind(auditId, admin.id, action, input.scope, affectedCount, timestamp, input.expectedCount);
+    const mutation = bytes === null
+      ? env.DB.prepare(`DELETE FROM user_settings WHERE user_id IN (SELECT id FROM users WHERE ${where}) AND EXISTS (SELECT 1 FROM admin_audit WHERE id=?1)`).bind(auditId)
+      : env.DB.prepare(`INSERT INTO user_settings(user_id,monthly_turn_limit_bytes,updated_by,updated_at)
+          SELECT id,?1,?2,?3 FROM users WHERE ${where} AND EXISTS (SELECT 1 FROM admin_audit WHERE id=?4)
+          ON CONFLICT(user_id) DO UPDATE SET monthly_turn_limit_bytes=excluded.monthly_turn_limit_bytes,updated_by=excluded.updated_by,updated_at=excluded.updated_at`)
+          .bind(bytes, admin.id, timestamp, auditId);
+    const results = await env.DB.batch([audit, mutation]);
+    const insertedAuditCount = (results[0] as { meta?: { changes?: number } } | undefined)?.meta?.changes ?? 0;
+    if (Number(insertedAuditCount) !== 1) return json({ error: { code: "TARGET_COUNT_CHANGED", message: "The user count changed. Refresh the preview before applying." } }, 409);
+    return json({ applied: true, affectedCount, scope: input.scope, monthlyTurnLimitBytes: bytes });
+  }
+  const userTurnLimitMatch = path.match(/^\/api\/admin\/users\/([A-Za-z0-9-]{1,80})\/turn-limit$/);
+  if (userTurnLimitMatch && method === "PATCH") {
+    const admin = await requireAdmin(request, env);
+    const targetId = userTurnLimitMatch[1]!;
+    const target = await env.DB.prepare("SELECT id FROM users WHERE id=?1 AND (expires_at IS NULL OR julianday(expires_at)>julianday('now'))").bind(targetId).first<{ id: string }>();
     if (!target) return error("User not found", 404, "NOT_FOUND");
-    await env.DB.prepare("UPDATE users SET turn_monthly_quota_bytes=?1,updated_at=?2 WHERE id=?3")
-      .bind(quotaBytes, now(), userId).run();
-    return json({ ok: true });
+    const input = await body(request);
+    const bytes = parseTurnLimitBytes(input.monthlyTurnLimitBytes);
+    if (bytes === undefined) return error("Monthly TURN limit must be null or an integer byte value from 0 to 1000000000000000", 400, "INVALID_TURN_LIMIT");
+    const timestamp = now();
+    const statements = bytes === null ? [
+      env.DB.prepare("DELETE FROM user_settings WHERE user_id=?1").bind(targetId),
+      env.DB.prepare("INSERT INTO admin_audit(id,actor_user_id,action,target_scope,affected_count,created_at) VALUES(?1,?2,'user_turn_limit_clear','single_user',1,?3)").bind(id(), admin.id, timestamp),
+    ] : [
+      env.DB.prepare(`INSERT INTO user_settings(user_id,monthly_turn_limit_bytes,updated_by,updated_at) VALUES(?1,?2,?3,?4)
+        ON CONFLICT(user_id) DO UPDATE SET monthly_turn_limit_bytes=excluded.monthly_turn_limit_bytes,updated_by=excluded.updated_by,updated_at=excluded.updated_at`)
+        .bind(targetId, bytes, admin.id, timestamp),
+      env.DB.prepare("INSERT INTO admin_audit(id,actor_user_id,action,target_scope,affected_count,created_at) VALUES(?1,?2,'user_turn_limit_set','single_user',1,?3)").bind(id(), admin.id, timestamp),
+    ];
+    await env.DB.batch(statements);
+    return json({ saved: true, monthlyTurnLimitBytesOverride: bytes });
+  }
+  const userPasswordMatch = path.match(/^\/api\/admin\/users\/([A-Za-z0-9-]{1,80})\/password$/);
+  if (userPasswordMatch && method === "POST") {
+    const admin = await requireAdmin(request, env);
+    const targetId = userPasswordMatch[1]!;
+    const admins = new Set((env.ADMIN_USER_IDS || "").split(",").map((value) => value.trim()).filter(Boolean));
+    if (targetId === admin.id) return error("An administrator cannot reset their own password through this endpoint", 403, "ADMIN_SELF_RESET_BLOCKED");
+    if (admins.has(targetId) && admins.size <= 1) return error("The only administrator account cannot be reset through this endpoint", 403, "LAST_ADMIN_RESET_BLOCKED");
+    const target = await env.DB.prepare("SELECT id FROM users WHERE id=?1").bind(targetId).first<{ id: string }>();
+    if (!target) return error("User not found", 404, "NOT_FOUND");
+    const input = await body(request);
+    if (typeof input.newPassword !== "string" || input.newPassword.length < 12 || input.newPassword.length > 200) return error("New password must be 12–200 characters", 400, "INVALID_PASSWORD");
+    const timestamp = now();
+    await env.DB.batch([
+      env.DB.prepare("UPDATE users SET password_hash=?1,updated_at=?2 WHERE id=?3").bind(await hashPassword(input.newPassword), timestamp, targetId),
+      env.DB.prepare("DELETE FROM sessions WHERE user_id=?1").bind(targetId),
+      env.DB.prepare("INSERT INTO admin_audit(id,actor_user_id,action,target_scope,affected_count,created_at) VALUES(?1,?2,'user_password_reset','single_user',1,?3)").bind(id(), admin.id, timestamp),
+    ]);
+    return json({ reset: true, sessionsRevoked: true });
+  }
+  if (path === "/api/usage" && method === "GET") {
+    const user = await requireAuth(request, env);
+    const configuration = await getSiteConfiguration(env);
+    const policy = await getUserTurnPolicy(env, configuration, user.id, !!user.is_temporary);
+    const usage = await getUserTurnUsage(env, user.id, policy.displayQuotaBytes);
+    return json({ ...usage, limitEnforced: policy.limitBytes !== null, limitBytes: policy.limitBytes, hasIndividualLimitOverride: policy.hasIndividualOverride });
+  }
+  if (path === "/api/usage/public" && method === "GET") {
+    const configuration = await getSiteConfiguration(env);
+    if (!configuration.usage.showPublicAggregate) return error("Public usage is disabled", 404, "NOT_FOUND");
+    return json(await getPublicTurnUsage(env, configuration.usage.minimumAggregateUsers));
   }
   if (path === "/api/admin/usage" && method === "GET") {
-    const user = await requireAuth(request, env);
-    if (!isAdmin(user, env)) return error("Not found", 404, "NOT_FOUND");
-    return json(await getPlatformTurnUsage(env));
+    await requireAdmin(request, env);
+    const configuration = await getSiteConfiguration(env);
+    const [platform, temporaryAccounts] = await Promise.all([
+      getPlatformTurnUsage(env),
+      getTemporaryTurnUsage(env, temporaryAggregateBudgetBytes(configuration)),
+    ]);
+    return json({ ...platform, temporaryAccounts });
   }
   if (path === "/api/turn/credentials" && method === "GET") {
     const user = await requireAuth(request, env);
     if (!env.TURN_KEY_ID || !env.TURN_API_TOKEN) return error("TURN is not configured", 503, "TURN_UNAVAILABLE");
-    const quota = await getUserTurnQuota(env, user.id);
-    if (quota.limitEnforced) {
-      const usage = await getUserTurnUsage(env, user.id, quota);
-      if (usage.available && quota.quotaBytes !== null && usage.usedBytes !== null && usage.usedBytes >= quota.quotaBytes) {
-        return error("The estimated monthly TURN limit has been reached; new relay credentials are paused until the next month.", 429, "TURN_QUOTA_EXCEEDED");
+    const platformLimit = await getPlatformTurnLimitStatus(env);
+    if (platformLimit.reached) {
+      return json({ iceServers: [], relayUnavailable: true, reason: "platform_monthly_turn_limit_reached", limitBytes: platformLimit.limitBytes });
+    }
+    const configuration = await getSiteConfiguration(env);
+    const policy = await getUserTurnPolicy(env, configuration, user.id, !!user.is_temporary);
+    if (policy.limitBytes !== null) {
+      const usage = await getUserTurnUsage(env, user.id, policy.displayQuotaBytes);
+      if (usage.available && usage.usedBytes !== null && usage.usedBytes >= policy.limitBytes) {
+        return json({ iceServers: [], relayUnavailable: true, reason: "monthly_turn_limit_reached", limitBytes: policy.limitBytes });
       }
     }
     const ttl = Math.max(60, Math.min(86_400, Number(env.TURN_CREDENTIAL_TTL_SECONDS) || 3600));
@@ -618,7 +797,7 @@ async function route(request: Request, env: Env): Promise<Response> {
       return error("TURN credential response was invalid", 502, "TURN_INVALID_RESPONSE");
     }
     if (!Array.isArray(data.iceServers)) return error("TURN credential response was invalid", 502, "TURN_INVALID_RESPONSE");
-    return json({ iceServers: data.iceServers, expiresAt: new Date(Date.now() + ttl * 1000).toISOString() });
+    return json({ iceServers: data.iceServers, expiresAt: new Date(Date.now() + ttl * 1000).toISOString(), relayUnavailable: false });
   }
 
   if (path === "/api/numbers/availability" && method === "GET") {

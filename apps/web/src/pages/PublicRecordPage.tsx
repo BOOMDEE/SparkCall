@@ -8,6 +8,7 @@ import { formatDate, formatDuration } from "../lib/format";
 import { PageHeader, ResourceState, StatusPill } from "../components/common";
 import { Button, Card, Field, Notice } from "../components/ui";
 import { LanguageSwitcher } from "../components/LanguageSwitcher";
+import { BrandLink } from "../components/BrandLink";
 import { SiteFooter } from "../components/SiteFooter";
 
 const inputClass = "focus-ring w-full rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm outline-none transition placeholder:text-neutral-400 dark:border-neutral-800 dark:bg-neutral-950 dark:text-white";
@@ -36,7 +37,7 @@ export default function PublicRecordPage() {
   return <div className="min-h-screen bg-white text-neutral-900 dark:bg-black dark:text-neutral-100">
     <main className="mx-auto max-w-4xl px-4 py-6 sm:px-6 sm:py-8">
       <header className="mb-8 flex flex-wrap items-center justify-between gap-4 border-b border-neutral-200 pb-4 dark:border-neutral-800">
-        <Link to="/" className="text-sm font-semibold tracking-tight" aria-label={t("header.homeAria")}>SparkCall</Link>
+        <BrandLink to="/" className="flex items-center gap-2 text-sm font-semibold tracking-tight" ariaLabel={t("header.homeAria")} markClassName="grid h-6 w-6 place-items-center rounded bg-neutral-900 text-white dark:bg-white dark:text-black" iconSize={13} filled />
         <div className="flex flex-wrap items-center gap-2">
           <LanguageSwitcher />
           <Button variant="secondary" onClick={() => void copyLink()} aria-label={t("actions.copyLinkAria")}><Clipboard size={14} aria-hidden="true" />{copied ? t("actions.copied") : t("actions.copyLink")}</Button>

@@ -11,6 +11,11 @@ on:
           - device
         default: api-token
         required: true
+      bootstrap_registration:
+        description: One-time registration bootstrap; requires device authorization and disables admin access until configured
+        type: boolean
+        default: false
+        required: false
 
 permissions:
   contents: read
@@ -26,6 +31,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      AUTH_METHOD: ${{ inputs.auth_method }}
+      BOOTSTRAP_REGISTRATION: ${{ inputs.bootstrap_registration }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -40,17 +47,37 @@ jobs:
         env:
           D1_DATABASE_ID: ${{ vars.D1_DATABASE_ID }}
           SPARKCALL_HOSTNAME: ${{ vars.SPARKCALL_HOSTNAME }}
+          ADMIN_USER_IDS: ${{ vars.ADMIN_USER_IDS }}
         run: |
           node - <<'NODE'
           const fs = require("node:fs");
           const databaseId = process.env.D1_DATABASE_ID || "";
           const hostname = process.env.SPARKCALL_HOSTNAME || "";
+          const accountId = process.env.CLOUDFLARE_ACCOUNT_ID || "";
+          const adminUserIds = (process.env.ADMIN_USER_IDS || "").split(",").map(value => value.trim()).filter(Boolean).join(",");
           if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(databaseId)) {
             console.error("Set the D1_DATABASE_ID repository variable to the target database UUID.");
             process.exit(1);
           }
+          if (!/^[0-9a-f]{32}$/i.test(accountId)) {
+            console.error("Set the CLOUDFLARE_ACCOUNT_ID Actions secret to the target account ID.");
+            process.exit(1);
+          }
           if (!/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i.test(hostname)) {
             console.error("Set the SPARKCALL_HOSTNAME repository variable to a hostname in your Cloudflare zone.");
+            process.exit(1);
+          }
+          const bootstrapRegistration = process.env.BOOTSTRAP_REGISTRATION === "true";
+          if (bootstrapRegistration && process.env.AUTH_METHOD !== "device") {
+            console.error("Registration bootstrap requires Cloudflare device authorization.");
+            process.exit(1);
+          }
+          if (bootstrapRegistration && adminUserIds !== "") {
+            console.error("Registration bootstrap requires an empty ADMIN_USER_IDS variable so all admin APIs remain fail-closed.");
+            process.exit(1);
+          }
+          if (!bootstrapRegistration && !/^[A-Za-z0-9_-]{1,80}(?:,[A-Za-z0-9_-]{1,80})*$/.test(adminUserIds)) {
+            console.error("Set the ADMIN_USER_IDS repository variable to one or more comma-separated SparkCall user IDs.");
             process.exit(1);
           }
           const path = "wrangler.jsonc";
@@ -58,6 +85,8 @@ jobs:
           for (const [placeholder, value] of [
             ["00000000-0000-4000-8000-000000000000", databaseId],
             ["app.example.com", hostname],
+            ["REPLACE_WITH_CLOUDFLARE_ACCOUNT_ID", accountId],
+            ["REPLACE_WITH_ADMIN_USER_IDS", adminUserIds],
           ]) {
             if (!config.includes(placeholder)) throw new Error("Expected deployment placeholder is missing.");
             config = config.replaceAll(placeholder, value);
@@ -83,6 +112,7 @@ jobs:
         run: |
           npx wrangler secret list --name sparkcall --format json | node -e '
             const required = ["INTERNAL_SIGNALING_TOKEN", "TURN_KEY_ID", "TURN_API_TOKEN", "SPARKCALL_WEBHOOK_ENCRYPTION_KEY"];
+            if (process.env.BOOTSTRAP_REGISTRATION !== "true") required.push("TURN_ANALYTICS_API_TOKEN");
             let input = "";
             process.stdin.on("data", chunk => input += chunk);
             process.stdin.on("end", () => {
@@ -102,6 +132,7 @@ jobs:
         run: |
           npx wrangler secret list --name sparkcall --format json | node -e '
             const required = ["INTERNAL_SIGNALING_TOKEN", "TURN_KEY_ID", "TURN_API_TOKEN", "SPARKCALL_WEBHOOK_ENCRYPTION_KEY"];
+            if (process.env.BOOTSTRAP_REGISTRATION !== "true") required.push("TURN_ANALYTICS_API_TOKEN");
             let input = "";
             process.stdin.on("data", chunk => input += chunk);
             process.stdin.on("end", () => {

@@ -9,7 +9,7 @@ type SignalType = "offer" | "answer" | "ice-candidate" | "accept" | "reject" | "
 interface SocketAttachment { userId: string; sessionId: string; role: Role; messageWindow: number; messageCount: number; authCheckedAt?: number; sessionExpiresAt?: number; }
 interface CallRecord { id: string; callerId: string; calleeId: string; status: CallStatus; createdAt: number; connectedAt?: number; disconnectedAt?: Partial<Record<Role, number>>; }
 interface QueuedSignal { target: Role; payload: string; createdAt: number; }
-interface Invite { callId: string; callerNumber: string; callerName: string; createdAt: number; expiresAt: number; }
+interface Invite { callId: string; calleeId?: string; callerNumber: string; callerName: string; createdAt: number; expiresAt: number; }
 interface SignalingEnv extends Env { INTERNAL_SIGNALING_TOKEN?: string; }
 interface SessionRow { user_id: string; session_expires_at: string | null; user_expires_at: string | null; revoked_at: string | null; }
 
@@ -392,7 +392,7 @@ export class SparkCallPresenceObject extends DurableObject<SignalingEnv> {
       if (expiresAt && expiresAt > nowMs) nextExpiry = Math.min(nextExpiry, expiresAt);
     }
     for (const [key, invite] of invites) {
-      if (invite.expiresAt <= nowMs) await this.ctx.storage.delete(key);
+      if (invite.expiresAt <= nowMs) await this.expireInvite(key, invite);
       else nextExpiry = Math.min(nextExpiry, invite.expiresAt);
     }
     if (nextExpiry !== Number.MAX_SAFE_INTEGER) {
@@ -451,14 +451,22 @@ export class SparkCallPresenceObject extends DurableObject<SignalingEnv> {
     try {
       const value = await request.json() as Partial<Invite>;
       if (!value.callId || !value.callerNumber || !value.callerName || !value.expiresAt) return json({ error: "Invalid invite" }, 400);
-      invite = { callId: value.callId, callerNumber: value.callerNumber, callerName: value.callerName, createdAt: value.createdAt || Date.now(), expiresAt: value.expiresAt };
+      invite = { callId: value.callId, calleeId: userId, callerNumber: value.callerNumber, callerName: value.callerName, createdAt: value.createdAt || Date.now(), expiresAt: value.expiresAt };
     } catch { return json({ error: "Invalid invite" }, 400); }
     if (invite.expiresAt <= Date.now() || invite.expiresAt > Date.now() + 60_000) return json({ error: "Invite expired" }, 400);
     const pending = await this.ctx.storage.list<Invite>({ prefix: "invite:" });
-    for (const [key, item] of pending) if (item.expiresAt <= Date.now()) await this.ctx.storage.delete(key);
+    for (const [key, item] of pending) if (item.expiresAt <= Date.now()) await this.expireInvite(key, item);
     await this.ctx.storage.put(`invite:${invite.callId}`, invite);
     for (const socket of this.ctx.getWebSockets()) { const peer = attachment(socket); if (peer && await this.authorizeSocket(socket, peer)) reply(socket, { type: "incoming-call", ...invite, calleeId: userId }); }
-    await this.ctx.storage.setAlarm(invite.expiresAt);
+    let nextExpiry = invite.expiresAt;
+    for (const socket of this.ctx.getWebSockets()) {
+      const expiresAt = attachment(socket)?.sessionExpiresAt;
+      if (expiresAt && expiresAt > Date.now()) nextExpiry = Math.min(nextExpiry, expiresAt);
+    }
+    const currentInvites = await this.ctx.storage.list<Invite>({ prefix: "invite:" });
+    for (const [, item] of currentInvites) if (item.expiresAt > Date.now()) nextExpiry = Math.min(nextExpiry, item.expiresAt);
+    const backstop = this.ctx.getWebSockets().length ? Date.now() + 30_000 : nextExpiry;
+    await this.ctx.storage.setAlarm(Math.max(Date.now() + 1_000, Math.min(nextExpiry, backstop)));
     return json({ ok: true });
   }
 
@@ -477,6 +485,17 @@ export class SparkCallPresenceObject extends DurableObject<SignalingEnv> {
     return json({ ok: true });
   }
 
+  private async expireInvite(key: string, invite: Invite) {
+    if (invite.calleeId) {
+      await this.env.DB.prepare(`
+        UPDATE call_history SET status='timeout',ended_at=datetime('now'),duration_seconds=0
+        WHERE id=?1 AND recipient_id=?2 AND status='calling'
+      `).bind(invite.callId, invite.calleeId).run();
+    }
+    await this.ctx.storage.delete(key);
+    for (const socket of await this.authorizedSockets()) reply(socket, { type: "incoming-call-ended", callId: invite.callId });
+  }
+
   private async openPresence(request: Request, userId: string) {
     if (!upgraded(request)) return json({ error: "WebSocket upgrade required" }, 426);
     const sessionId = request.headers.get("X-SparkCall-Session-ID") || "";
@@ -488,11 +507,20 @@ export class SparkCallPresenceObject extends DurableObject<SignalingEnv> {
     this.ctx.acceptWebSocket(server);
     const checkedAt = Date.now();
     server.serializeAttachment({ userId, sessionId, role: "callee", messageWindow: checkedAt, messageCount: 0, authCheckedAt: checkedAt, sessionExpiresAt: sessionExpiry(auth) } satisfies SocketAttachment);
-    if (sessionExpiry(auth)) await this.ctx.storage.setAlarm(sessionExpiry(auth)!);
+    let nextExpiry = Number.MAX_SAFE_INTEGER;
+    for (const socket of this.ctx.getWebSockets()) {
+      const expiresAt = attachment(socket)?.sessionExpiresAt;
+      if (expiresAt && expiresAt > Date.now()) nextExpiry = Math.min(nextExpiry, expiresAt);
+    }
     const pending = await this.ctx.storage.list<Invite>({ prefix: "invite:" });
     for (const [key, invite] of pending) {
-      if (invite.expiresAt <= Date.now()) { await this.ctx.storage.delete(key); continue; }
+      if (invite.expiresAt <= Date.now()) { await this.expireInvite(key, invite); continue; }
+      nextExpiry = Math.min(nextExpiry, invite.expiresAt);
       reply(server, { type: "incoming-call", ...invite, calleeId: userId });
+    }
+    if (nextExpiry !== Number.MAX_SAFE_INTEGER) {
+      const backstop = this.ctx.getWebSockets().length ? Date.now() + 30_000 : nextExpiry;
+      await this.ctx.storage.setAlarm(Math.max(Date.now() + 1_000, Math.min(nextExpiry, backstop)));
     }
     return new Response(null, { status: 101, webSocket: client });
   }

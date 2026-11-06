@@ -24,10 +24,10 @@
     "offlineHelp": "Presence is not connected yet"
   },
   "quickDial": {
-    "title": "Contact a user",
-    "detail": "Enter a SparkCall username or number. Usernames are case-insensitive; numbers are case-sensitive.",
-    "aria": "SparkCall username or number",
-    "placeholder": "Enter a username or number",
+    "title": "Call a number",
+    "detail": "Enter the exact SparkCall number, including letter case.",
+    "aria": "SparkCall number",
+    "placeholder": "Enter a number",
     "submit": "Call"
   },
   "gettingStarted": {

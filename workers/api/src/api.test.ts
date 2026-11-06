@@ -1,5 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { handleApi } from "./api";
+
+afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 const user = { id: "user-1", display_name: "Caller", is_temporary: 0, expires_at: null, session_id: "session-1" };
 const cookie = "sc_session=test-session";
@@ -37,10 +39,12 @@ function preferenceEnv() {
         };
         return Object.assign(statement, bound);
       }),
+      query,
     };
     return statement;
   });
-  return { DB: { prepare }, ALLOWED_ORIGIN: "https://example.test" } as any;
+  const batch = vi.fn(async (statements: Array<{ query: string }>) => statements.map(() => ({ success: true, meta: { changes: 1 } })));
+  return { DB: { prepare, batch }, ALLOWED_ORIGIN: "https://example.test" } as any;
 }
 
 async function jsonResponse(response: Response) {
@@ -64,98 +68,6 @@ describe("API preference and TURN regressions", () => {
     const final = await jsonResponse(finalResponse);
     expect(final.body.version).toBe(2);
     expect(final.body.preferences).toMatchObject({ theme: "dark", bitrateKbps: 64 });
-  });
-
-  it("pauses new relay credentials when the sampled estimate reaches the user's limit", async () => {
-    const queries: string[] = [];
-    const authenticatedUser = { id: "user-1", display_name: "Caller", is_temporary: 0, expires_at: null, session_id: "session-1" };
-    const db = {
-      prepare: vi.fn((query: string) => {
-        queries.push(query);
-        return { bind: vi.fn(() => ({
-          first: vi.fn(async () => {
-            if (query.includes("FROM sessions s JOIN users u")) return authenticatedUser;
-            if (query.includes("turn_monthly_quota_bytes")) return { turn_monthly_quota_bytes: 100 };
-            return null;
-          }),
-          run: vi.fn(async () => ({ success: true })),
-        })) };
-      }),
-    };
-    const env = { ...preferenceEnv(), DB: db, TURN_KEY_ID: "turn-key", TURN_API_TOKEN: "turn-token", CLOUDFLARE_ACCOUNT_ID: "account-id", TURN_ANALYTICS_API_TOKEN: "analytics-token" };
-    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      data: { viewer: { accounts: [{ callsTurnUsageAdaptiveGroups: [{ sum: { egressBytes: 100 } }] }] } },
-    })));
-    vi.stubGlobal("fetch", fetchMock);
-
-    const result = await jsonResponse(await handleApi(request("/api/turn/credentials"), env as any));
-
-    expect(result.status).toBe(429);
-    expect(result.body).toMatchObject({ error: { code: "TURN_QUOTA_EXCEEDED" } });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(queries.some((query) => query.includes("INSERT INTO usage_snapshots"))).toBe(true);
-    vi.unstubAllGlobals();
-  });
-
-  it("fails open and issues relay credentials when sampled usage is unavailable", async () => {
-    const authenticatedUser = { id: "user-1", display_name: "Caller", is_temporary: 1, expires_at: null, session_id: "session-1" };
-    const db = {
-      prepare: vi.fn((query: string) => ({ bind: vi.fn(() => ({
-        first: vi.fn(async () => {
-          if (query.includes("FROM sessions s JOIN users u")) return authenticatedUser;
-          if (query.includes("turn_monthly_quota_bytes")) return { turn_monthly_quota_bytes: 100 };
-          return null;
-        }),
-        run: vi.fn(async () => ({ success: true })),
-      })) })),
-    };
-    const env = { ...preferenceEnv(), DB: db, TURN_KEY_ID: "turn-key", TURN_API_TOKEN: "turn-token", CLOUDFLARE_ACCOUNT_ID: "account-id", TURN_ANALYTICS_API_TOKEN: "analytics-token" };
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce(new Response("analytics unavailable", { status: 503 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ iceServers: [] })));
-    vi.stubGlobal("fetch", fetchMock);
-
-    const result = await jsonResponse(await handleApi(request("/api/turn/credentials"), env as any));
-
-    expect(result.status).toBe(200);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(String(fetchMock.mock.calls[1]?.[0])).toContain("rtc.live.cloudflare.com");
-  });
-
-  it("does not query analytics for relay credentials when no per-user limit is set", async () => {
-    const authenticatedUser = { id: "user-1", display_name: "Caller", is_temporary: 0, expires_at: null, session_id: "session-1" };
-    const db = { prepare: vi.fn((query: string) => ({ bind: vi.fn(() => ({
-      first: vi.fn(async () => query.includes("FROM sessions s JOIN users u") ? authenticatedUser : query.includes("turn_monthly_quota_bytes") ? { turn_monthly_quota_bytes: null } : null),
-      run: vi.fn(async () => ({ success: true })),
-    })) })) };
-    const env = { ...preferenceEnv(), DB: db, TURN_KEY_ID: "turn-key", TURN_API_TOKEN: "turn-token", CLOUDFLARE_ACCOUNT_ID: "account-id", TURN_ANALYTICS_API_TOKEN: "analytics-token" };
-    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ iceServers: [] })));
-    vi.stubGlobal("fetch", fetchMock);
-
-    const result = await jsonResponse(await handleApi(request("/api/turn/credentials"), env as any));
-
-    expect(result.status).toBe(200);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("rtc.live.cloudflare.com");
-    vi.unstubAllGlobals();
-  });
-
-  it("lets configured admins bulk-set monthly limits in decimal GB", async () => {
-    const updates: Array<{ query: string; values: unknown[] }> = [];
-    const authenticatedUser = { id: "user-1", display_name: "Admin", is_temporary: 0, expires_at: null, session_id: "session-1" };
-    const db = {
-      prepare: vi.fn((query: string) => ({ bind: vi.fn((...values: unknown[]) => ({
-        first: vi.fn(async () => query.includes("FROM sessions s JOIN users u") ? authenticatedUser : null),
-        run: vi.fn(async () => { updates.push({ query, values }); return { success: true, meta: { changes: 3 } }; }),
-      })) })),
-    };
-    const env = { ...preferenceEnv(), DB: db, ADMIN_USER_IDS: "user-1" };
-    const result = await jsonResponse(await handleApi(request("/api/admin/quotas", { method: "PATCH", body: JSON.stringify({ applyToAll: true, quotaGb: 1.5 }) }), env as any));
-
-    expect(result.status).toBe(200);
-    expect(result.body).toEqual({ ok: true, updated: 3 });
-    expect(updates[0]?.query).toContain("turn_monthly_quota_bytes");
-    expect(updates[0]?.values[0]).toBe(1_500_000_000);
   });
 
   it("maps a bounded provider abort to the existing TURN unavailable response", async () => {
@@ -186,5 +98,92 @@ describe("API preference and TURN regressions", () => {
     expect(oversized).toMatchObject({ status: 502, body: { error: { code: "TURN_INVALID_RESPONSE" } } });
     expect(fetchMock.mock.calls[0]?.[1]).not.toMatchObject({ body: expect.stringContaining("provider-secret") });
     vi.unstubAllGlobals();
+  });
+
+  it("blocks only new TURN credentials when this deployment key reaches its platform monthly limit", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      data: { viewer: { accounts: [{ callsTurnUsageAdaptiveGroups: [{ dimensions: { datetimeFiveMinutes: "2026-11-06T10:00:00Z" }, sum: { egressBytes: 800_000_000_000 } }] }] } },
+    }), { status: 200, headers: { "content-type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    const env = {
+      ...preferenceEnv(),
+      CLOUDFLARE_ACCOUNT_ID: "platform-limit-account",
+      TURN_KEY_ID: "sparkcall-turn-key",
+      TURN_API_TOKEN: "provider-secret",
+      TURN_ANALYTICS_API_TOKEN: "analytics-secret",
+      TURN_PLATFORM_MONTHLY_LIMIT_BYTES: "800000000000",
+    };
+
+    const result = await jsonResponse(await handleApi(request("/api/turn/credentials"), env));
+    expect(result).toMatchObject({
+      status: 200,
+      body: { iceServers: [], relayUnavailable: true, reason: "platform_monthly_turn_limit_reached", limitBytes: 800_000_000_000 },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const analyticsRequest = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as { query: string };
+    expect(analyticsRequest.query).toContain('keyId: "sparkcall-turn-key"');
+    expect(JSON.stringify(result.body)).not.toContain("analytics-secret");
+    vi.unstubAllGlobals();
+  });
+
+  it("fails open when the project-scoped Analytics query errors and still returns TURN credentials", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response("unavailable", { status: 503 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ iceServers: [{ urls: "turn:relay.example.test" }] }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const env = {
+      ...preferenceEnv(),
+      CLOUDFLARE_ACCOUNT_ID: "platform-fail-open-account",
+      TURN_KEY_ID: "sparkcall-turn-key-fail-open",
+      TURN_API_TOKEN: "provider-secret",
+      TURN_ANALYTICS_API_TOKEN: "analytics-secret",
+      TURN_PLATFORM_MONTHLY_LIMIT_BYTES: "800000000000",
+    };
+
+    const result = await jsonResponse(await handleApi(request("/api/turn/credentials"), env));
+    expect(result).toMatchObject({ status: 200, body: { relayUnavailable: false, iceServers: [{ urls: "turn:relay.example.test" }] } });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    vi.unstubAllGlobals();
+  });
+
+  it("keeps admin settings allowlisted and never projects the analytics token to the public API", async () => {
+    const tokenSentinel = "test-only-analytics-token-sentinel";
+    const env = { ...preferenceEnv(), TURN_ANALYTICS_API_TOKEN: tokenSentinel };
+    const denied = await jsonResponse(await handleApi(request("/api/admin/config"), env));
+    expect(denied.status).toBe(404);
+
+    const publicResponse = await jsonResponse(await handleApi(request("/api/config"), env));
+    expect(publicResponse.status).toBe(200);
+    expect(JSON.stringify(publicResponse.body)).not.toContain(tokenSentinel);
+    expect(publicResponse.body).not.toHaveProperty("platformUsage");
+
+    env.ADMIN_USER_IDS = user.id;
+    const allowed = await jsonResponse(await handleApi(request("/api/admin/config"), env));
+    expect(allowed.status).toBe(200);
+    expect(JSON.stringify(allowed.body)).not.toContain(tokenSentinel);
+  });
+
+  it("commits administrator configuration and its audit row in the same D1 batch", async () => {
+    const env = preferenceEnv();
+    env.ADMIN_USER_IDS = user.id;
+    const update = await jsonResponse(await handleApi(request("/api/admin/config", {
+      method: "PATCH",
+      body: JSON.stringify({ configuration: { branding: { productName: "Preview SparkCall" } } }),
+    }), env));
+    expect(update.status).toBe(200);
+    expect(env.DB.batch).toHaveBeenCalledTimes(1);
+    const updateStatements = env.DB.batch.mock.calls[0]?.[0] ?? [];
+    expect(updateStatements).toHaveLength(2);
+    expect(updateStatements[0]?.query).toContain("INSERT INTO app_settings");
+    expect(updateStatements[1]?.query).toContain("INSERT INTO admin_audit");
+
+    const reset = await jsonResponse(await handleApi(request("/api/admin/config", { method: "DELETE" }), env));
+    expect(reset.status).toBe(200);
+    expect(env.DB.batch).toHaveBeenCalledTimes(2);
+    const resetStatements = env.DB.batch.mock.calls[1]?.[0] ?? [];
+    expect(resetStatements).toHaveLength(2);
+    expect(resetStatements[0]?.query).toContain("DELETE FROM app_settings");
+    expect(resetStatements[1]?.query).toContain("INSERT INTO admin_audit");
   });
 });

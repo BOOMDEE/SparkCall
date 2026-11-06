@@ -18,10 +18,11 @@ npm run test:integration
 
 | Layer / 层级 | Checks / 检查 |
 | --- | --- |
-| Browser helpers / 浏览器工具 | API response unwrapping, structured errors, credential mode, duration/traffic/date formatting / 响应解包、结构化错误、请求凭据模式及格式化 |
+| Browser helpers / 浏览器工具 | API response unwrapping, structured errors, credential mode, local browser settings, missed-call notification deduplication and duration/traffic/date formatting / 响应解包、结构化错误、请求凭据模式、本地浏览器设置、未接通知去重及格式化 |
 | Authentication / 认证 | PBKDF2 hash round trips and malformed hashes, token hashing, cookies, session/revocation SQL, limiter behavior / 密码哈希、畸形输入、令牌、Cookie、会话撤销和限流 |
 | Validation / 校验 | Username/number/slug boundaries, JSON size and parsing, parameter binding, case-sensitive number lookup / 账户、号码、slug、JSON 大小及参数化查询 |
 | Call entry / 呼叫入口 | Cross-site call creation rejection and date-normalized active-call query / 跨站创建拒绝及活动呼叫时间比较 |
+| Presence / 在线与来电邀请 | Expired unanswered invites update only still-calling records to timeout; accepting or ending calls is not overwritten / 邀请到期时仅将仍在呼叫状态的记录更新为超时，不覆盖已接听或已结束呼叫 |
 | Real local HTTP + D1 / 真实本地 HTTP 与 D1 | Guest creation and identity-preserving upgrade, custom number case sensitivity/cooldown, contact ownership, blocklist enforcement, concurrent preference patches from independent sessions with monotonic versions, private/public/revoked/expired records, public-field filtering, login/logout / 临时身份升级、号码、联系人权限、黑名单、独立会话并发偏好更新与单调版本、记录隐私与过期、登录退出 |
 | Record lifecycle / 记录生命周期 | Capability access after logout and temporary-user deletion, with retained call metadata / 退出及临时账号删除后，独立能力凭据仍可管理记录且保留通话元数据 |
 
@@ -37,9 +38,9 @@ These checks do **not** prove real audio connectivity or production readiness. B
 
 这些检查**不能**证明真实音频连通或生产可用。发布前需以至少两个独立登录的浏览器/设备，验证麦克风权限、来电接听/拒绝、静音/挂断、设备切换、重连、多设备/并发通话仲裁及音质；还需在真实网络下分别验证直连和 TURN 中继，并另行核验远端迁移、Durable Object 休眠/闹钟与使用量分析。浏览器兼容性、无障碍和响应式布局也需人工检查。
 
-Production deployment is currently paused. No local test result should be reported as a live deployment or a completed cross-network audio acceptance test.
+The repository has a deployed pre-release public preview, but local test results do not prove production readiness or completed cross-network audio acceptance. Deployments remain manual and require maintainer authorization.
 
-目前生产部署已暂停。不得将本地测试结果表述为已上线，或已完成跨网络音频验收。
+仓库已有预发布公开预览，但本地测试不证明生产可用性，也不代表已完成跨网络音频验收。部署仍为手动操作，并需维护者授权。
 
 ## Release preflight / 发布前预检
 

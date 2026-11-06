@@ -3,6 +3,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { UserPreferences } from "../lib/api";
+import { browserSettingsKey } from "../lib/browser-settings";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -63,7 +64,7 @@ function render() {
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
-  act(() => root.render(<CallSessionProvider><Consumer /></CallSessionProvider>));
+  act(() => root.render(<CallSessionProvider userId="test-user"><Consumer /></CallSessionProvider>));
   return { host, root };
 }
 
@@ -77,14 +78,14 @@ function renderPreferences() {
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
-  act(() => root.render(<CallSessionProvider><PreferenceConsumer /></CallSessionProvider>));
+  act(() => root.render(<CallSessionProvider userId="test-user"><PreferenceConsumer /></CallSessionProvider>));
   return { host, root };
 }
 
 function invite(callId = "call-1") { return { callId, callerNumber: "SC111", callerName: "Alice", createdAt: Date.now(), expiresAt: Date.now() + 30_000 }; }
 
-beforeEach(() => { mocked.api.mockReset(); mocked.api.mockResolvedValue({ preferences, version: 0 }); updatePreferencesForTest = null; });
-afterEach(() => { document.body.innerHTML = ""; mocked.controllers.length = 0; vi.clearAllMocks(); });
+beforeEach(() => { localStorage.clear(); mocked.api.mockReset(); mocked.api.mockResolvedValue({ preferences, version: 0 }); updatePreferencesForTest = null; });
+afterEach(() => { document.body.innerHTML = ""; localStorage.clear(); mocked.controllers.length = 0; vi.clearAllMocks(); });
 
 describe("CallSessionProvider preference readiness", () => {
   it("applies authoritative preferences before becoming ready", async () => {
@@ -182,6 +183,17 @@ describe("CallSessionProvider preference writes", () => {
 });
 
 describe("CallSessionProvider incoming calls", () => {
+  it("hides incoming-call UI without rejecting when this browser is in do-not-disturb mode", async () => {
+    localStorage.setItem(browserSettingsKey("test-user"), JSON.stringify({ doNotDisturb: true, missedCallNotifications: false }));
+    const view = render();
+    await act(async () => { await Promise.resolve(); });
+    const controller = mocked.controllers[0];
+    act(() => controller.emitIncoming(invite("call-dnd")));
+    expect(view.host.textContent).not.toContain("Incoming call");
+    expect(controller.rejected).toEqual([]);
+    act(() => view.root.unmount());
+  });
+
   it("preserves incoming peer identity after answering", async () => {
     const view = render();
     await act(async () => { await Promise.resolve(); });

@@ -4,11 +4,17 @@
   "main": "workers/api/src/index.ts",
   "compatibility_date": "2026-11-02",
   "compatibility_flags": ["global_fetch_strictly_public"],
+  "rules": [{ "type": "Text", "globs": ["**/*.yaml"], "fallthrough": true }],
   "upload_source_maps": true,
   "workers_dev": false,
   "routes": [
     { "pattern": "app.example.com", "custom_domain": true }
   ],
+  "vars": {
+    "CLOUDFLARE_ACCOUNT_ID": "REPLACE_WITH_CLOUDFLARE_ACCOUNT_ID",
+    "ADMIN_USER_IDS": "REPLACE_WITH_ADMIN_USER_IDS",
+    "TURN_PLATFORM_MONTHLY_LIMIT_BYTES": "800000000000"
+  },
   "assets": {
     "directory": "./apps/web/dist/",
     "binding": "ASSETS",

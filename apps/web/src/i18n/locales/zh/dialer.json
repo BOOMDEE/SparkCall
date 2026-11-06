@@ -1,7 +1,7 @@
 {
   "eyebrow": "浏览器通话",
   "title": "拨号台",
-  "detail": "使用 SparkCall 用户名或号码发起私密浏览器通话。仅在需要音频时请求麦克风权限。",
+  "detail": "使用 SparkCall 号码或用户名链接发起私密浏览器通话。仅在需要音频时请求麦克风权限。",
   "sections": {
     "placeCall": "发起通话",
     "currentCall": "当前通话",
@@ -9,11 +9,14 @@
   },
   "form": {
     "prompt": "你要呼叫谁？",
-    "numberLabel": "SparkCall 用户名或号码",
-    "numberPlaceholder": "例如：alice 或 SC888",
-    "numberHint": "用户名不区分大小写；号码区分大小写。",
+    "numberLabel": "SparkCall 号码",
+    "numberPlaceholder": "例如：SC888",
+    "numberHint": "号码区分大小写。请输入对方准确的 SparkCall 号码。",
+    "usernamePrompt": "正在呼叫 {{username}}",
+    "usernameHint": "此链接将向 SparkCall 用户 {{username}} 发起实时通话。响铃期间可以取消。",
     "privacyNote": "音频通过加密 WebRTC 保持在通话双方之间。",
     "call": "呼叫",
+    "callUser": "呼叫 {{username}}",
     "connecting": "正在连接…"
   },
   "identity": {
@@ -40,7 +43,8 @@
     "cancel": "取消",
     "hangUp": "挂断",
     "refreshDevices": "刷新设备",
-    "retry": "重试"
+    "retry": "重试",
+    "openCurrentCall": "打开当前通话"
   },
   "incomingDialog": {
     "title": "来电",
@@ -66,11 +70,26 @@
   "status": {
     "eyebrow": "实时详情",
     "presence": "在线状态",
+    "network": "设备网络",
     "state": "通话状态",
     "connection": "WebRTC 连接",
+    "preferredMode": "下一通的连接偏好",
+    "modePreferenceDetail": "更改仅在下一通生效，不会重建正在进行的通话。自动模式先尝试 P2P 直连，再回退 TURN；TURN-only 仅使用中继。P2P 直连媒体流量不计入 TURN 用量。",
+    "currentMode": "当前媒体路径",
+    "relayUnavailable": "采样用量已达到月度 TURN 中继上限。本通正在尝试 P2P 直连；分析数据可能延迟，因此这不是实时硬限制，实际用量可能超过显示额度。",
     "duration": "时长",
     "online": "已连接",
     "offline": "正在重连",
+    "networkStates": {
+      "online": "设备显示在线",
+      "offline": "设备显示离线"
+    },
+    "recovery": {
+      "idle": "",
+      "reconnecting": "网络连接中断，正在尝试自动恢复通话…",
+      "recovered": "通话网络连接已恢复。",
+      "failed": "无法自动恢复通话。请检查网络后重新拨打。"
+    },
     "connectionStates": {
       "new": "新建",
       "connecting": "连接中",
@@ -79,17 +98,27 @@
       "failed": "失败",
       "closed": "已关闭"
     },
+    "connectionModes": {
+      "unknown": "协商中 / 未知",
+      "p2p": "P2P 直连",
+      "turn": "TURN 中继",
+      "auto": "自动 · 优先 P2P，必要时 TURN",
+      "preferredP2p": "仅 P2P 直连",
+      "preferredTurn": "仅 TURN 中继"
+    },
     "webrtcNote": "通话使用 WebRTC。Cloudflare TURN 凭据由服务器获取，不会暴露为长期账号凭据。",
-    "failureHint": "如果连接失败，请确认此部署已配置 TURN 凭据，然后重试。"
+    "failureHint": "网络波动时，主叫方最多会自动重试两次。若仍失败，请检查网络以及此部署的 TURN 配置后重拨。"
   },
   "errors": {
-    "missingNumber": "请输入 SparkCall 用户名或号码后再呼叫。",
+    "missingNumber": "请输入 SparkCall 号码后再呼叫。",
+    "alreadyOnCall": "已有通话正在进行，请先结束当前通话，再重试此用户名链接。",
     "callFailed": "无法发起通话。{{detail}}",
     "preferencesLoading": "正在加载通话偏好设置，暂时无法呼叫。",
     "preferencesFailed": "无法加载通话偏好设置。在成功加载前，呼叫已被阻止。",
     "audioDevicesFailed": "无法访问音频设备。{{detail}}",
     "microphoneFailed": "无法切换麦克风。{{detail}}",
     "speakerFailed": "此浏览器不支持选择扬声器。{{detail}}",
+    "modeSave": "无法保存连接模式偏好。{{detail}}",
     "session": "通话服务错误。{{detail}}"
   }
 }

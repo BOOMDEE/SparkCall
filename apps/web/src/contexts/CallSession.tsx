@@ -1,12 +1,14 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { api, type IncomingCallInvite, type PreferenceSnapshot, type UserPreferences } from "../lib/api";
+import { api, type HistoryItem, type IncomingCallInvite, type PreferenceSnapshot, type UserPreferences } from "../lib/api";
+import { browserSettingsKey, clearSeenMissedCallIds, readBrowserSettings, readSeenMissedCallIds, writeBrowserSettings, writeSeenMissedCallIds, type BrowserSettings } from "../lib/browser-settings";
 import { CallController, type CallSnapshot } from "../lib/webrtc";
 import { AccessibleDialog, Button, Notice } from "../components/ui";
 import { Phone, PhoneOff, RefreshCw } from "lucide-react";
 
 const DEFAULT_PREFERENCES: UserPreferences = {
   forceTurn: false,
+  connectionMode: "auto",
   echoCancellation: true, noiseSuppression: true, autoGainControl: true,
   audioInputDeviceId: "", audioOutputDeviceId: "", bitrateMode: "standard", bitrateKbps: 32,
   allowIncoming: true, showOnlineStatus: true, theme: "system",
@@ -18,19 +20,21 @@ type CallSessionValue = {
   incoming: IncomingCallInvite | null;
   peer: IncomingCallInvite | null;
   preferences: UserPreferences;
+  browserSettings: BrowserSettings;
   preferencesReady: boolean;
   preferenceLoadError: boolean;
   retryPreferences: () => void;
   error: string | null;
   clearError: () => void;
   updatePreferences: (patch: Partial<UserPreferences>) => Promise<void>;
+  updateBrowserSettings: (patch: Partial<BrowserSettings>) => void;
   acceptIncoming: () => Promise<void>;
   rejectIncoming: () => Promise<void>;
   audioPlaybackBlocked: boolean;
   resumeRemoteAudio: () => Promise<void>;
 };
 const CallSessionContext = createContext<CallSessionValue | null>(null);
-const IDLE: CallSnapshot = { id: null, state: "IDLE", role: null, durationMs: 0, muted: false, connectionState: "new" };
+const IDLE: CallSnapshot = { id: null, state: "IDLE", role: null, durationMs: 0, muted: false, connectionState: "new", connectionMode: "unknown", relayUnavailable: false, networkOnline: true, recoveryStatus: "idle" };
 const TERMINAL = new Set(["ENDED", "REJECTED", "BUSY", "TIMEOUT", "FAILED", "CANCELLED"]);
 
 export function useCallSession() {
@@ -39,8 +43,9 @@ export function useCallSession() {
   return value;
 }
 
-export function CallSessionProvider({ children }: { children: ReactNode }) {
+export function CallSessionProvider({ children, userId }: { children: ReactNode; userId: string }) {
   const { t } = useTranslation("dialer");
+  const { t: tSettings } = useTranslation("settings");
   const controllerRef = useRef<CallController | null>(null);
   const incomingRef = useRef<IncomingCallInvite | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -49,12 +54,14 @@ export function CallSessionProvider({ children }: { children: ReactNode }) {
   const preferenceMutationRef = useRef(0);
   const preferenceVersionRef = useRef(0);
   const preferenceWriteQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const browserSettingsRef = useRef<BrowserSettings>(readBrowserSettings(userId));
   const [controller, setController] = useState<CallController | null>(null);
   const [snapshot, setSnapshot] = useState(IDLE);
   const [online, setOnline] = useState(false);
   const [incoming, setIncomingState] = useState<IncomingCallInvite | null>(null);
   const [peer, setPeer] = useState<IncomingCallInvite | null>(null);
   const [preferences, setPreferences] = useState(DEFAULT_PREFERENCES);
+  const [browserSettings, setBrowserSettings] = useState<BrowserSettings>(() => readBrowserSettings(userId));
   const [preferencesReady, setPreferencesReady] = useState(false);
   const [preferenceLoadError, setPreferenceLoadError] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -79,6 +86,7 @@ export function CallSessionProvider({ children }: { children: ReactNode }) {
           void busyResponder.rejectIncoming(invite.callId);
           return;
         }
+        if (browserSettingsRef.current.doNotDisturb) return;
         setIncoming(invite);
       },
       onIncomingCallEnded: (callId) => { if (incomingRef.current?.callId === callId) setIncoming(null); },
@@ -141,6 +149,25 @@ export function CallSessionProvider({ children }: { children: ReactNode }) {
     return () => window.clearTimeout(timeout);
   }, [incoming, setIncoming]);
 
+  useEffect(() => {
+    browserSettingsRef.current = browserSettings;
+  }, [browserSettings]);
+
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== browserSettingsKey(userId) && event.key !== null) return;
+      const next = readBrowserSettings(userId);
+      browserSettingsRef.current = next;
+      setBrowserSettings(next);
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [userId]);
+
+  useEffect(() => {
+    if (browserSettings.doNotDisturb && incomingRef.current) setIncoming(null);
+  }, [browserSettings.doNotDisturb, setIncoming]);
+
   const retryPreferences = useCallback(() => { void loadPreferencesRef.current?.(); }, []);
   const updatePreferences = useCallback((patch: Partial<UserPreferences>) => {
     preferenceMutationRef.current += 1;
@@ -159,6 +186,68 @@ export function CallSessionProvider({ children }: { children: ReactNode }) {
     preferenceWriteQueueRef.current = operation.then(() => undefined, () => undefined);
     return operation;
   }, []);
+
+  const updateBrowserSettings = useCallback((patch: Partial<BrowserSettings>) => {
+    const next = { ...browserSettingsRef.current, ...patch };
+    browserSettingsRef.current = next;
+    setBrowserSettings(next);
+    writeBrowserSettings(userId, next);
+    if (patch.missedCallNotifications === false) clearSeenMissedCallIds(userId);
+  }, [userId]);
+
+  useEffect(() => {
+    if (!preferencesReady || !browserSettings.missedCallNotifications) return;
+    let active = true;
+    let polling = false;
+    let timer: number | undefined;
+    const pollMissedCalls = async () => {
+      if (!active || polling) return;
+      polling = true;
+      try {
+        const history = await api<HistoryItem[]>("/api/history?type=missed&limit=100");
+        if (!active) return;
+        const missed = history.filter((item) => item.direction === "incoming");
+        const currentIds = missed.map((item) => item.id);
+        const seenIds = readSeenMissedCallIds(userId);
+        if (seenIds === null) {
+          writeSeenMissedCallIds(userId, currentIds);
+          return;
+        }
+        const seen = new Set(seenIds);
+        const unseen = missed.filter((item) => !seen.has(item.id));
+        writeSeenMissedCallIds(userId, [...seenIds, ...currentIds]);
+        if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+        for (let index = 0; index < unseen.length; index += 1) {
+          try {
+            const notification = new Notification(tSettings("notifications.missedTitle"), {
+              body: tSettings("notifications.missedBody"),
+            });
+            notification.onclick = () => {
+              window.focus();
+              notification.close();
+            };
+          } catch {
+            // Browser notifications are best-effort and must never interrupt calling.
+          }
+        }
+      } catch {
+        // History remains available in the app if polling or notification delivery fails.
+      } finally {
+        polling = false;
+        if (active) timer = window.setTimeout(() => void pollMissedCalls(), 30_000);
+      }
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") void pollMissedCalls();
+    };
+    void pollMissedCalls();
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      active = false;
+      if (timer !== undefined) window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [browserSettings.missedCallNotifications, preferencesReady, tSettings, userId]);
   const acceptIncoming = useCallback(async () => {
     const invite = incomingRef.current;
     if (!invite || !preferencesReady) return;
@@ -183,9 +272,9 @@ export function CallSessionProvider({ children }: { children: ReactNode }) {
   }, [setIncoming]);
 
   const value = useMemo<CallSessionValue>(() => ({
-    controller, snapshot, online, incoming, peer, preferences, preferencesReady, preferenceLoadError,
-    retryPreferences, error, clearError, updatePreferences, acceptIncoming, rejectIncoming, audioPlaybackBlocked, resumeRemoteAudio,
-  }), [controller, snapshot, online, incoming, peer, preferences, preferencesReady, preferenceLoadError, retryPreferences, error, clearError, updatePreferences, acceptIncoming, rejectIncoming, audioPlaybackBlocked, resumeRemoteAudio]);
+    controller, snapshot, online, incoming, peer, preferences, browserSettings, preferencesReady, preferenceLoadError,
+    retryPreferences, error, clearError, updatePreferences, updateBrowserSettings, acceptIncoming, rejectIncoming, audioPlaybackBlocked, resumeRemoteAudio,
+  }), [controller, snapshot, online, incoming, peer, preferences, browserSettings, preferencesReady, preferenceLoadError, retryPreferences, error, clearError, updatePreferences, updateBrowserSettings, acceptIncoming, rejectIncoming, audioPlaybackBlocked, resumeRemoteAudio]);
 
   return <CallSessionContext.Provider value={value}>
     {children}

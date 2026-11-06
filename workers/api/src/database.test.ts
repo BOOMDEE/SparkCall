@@ -105,11 +105,14 @@ describe("database query boundaries", () => {
     expect(user.prepared.bind).toHaveBeenCalledWith("u1' OR 1=1 --");
   });
 
-  it("uses case-insensitive parameterized username lookup", async () => {
+  it("resolves permanent usernames case-insensitively without selecting password hashes", async () => {
     const byUsername = db({ id: "u1" });
-    await expect(findByUsername(byUsername.DB as any, "Friendly.User")).resolves.toEqual({ id: "u1" });
-    expect(byUsername.DB.prepare.mock.calls[0]?.[0]).toContain("COLLATE NOCASE");
-    expect(byUsername.prepared.bind).toHaveBeenCalledWith("Friendly.User");
+    await expect(findByUsername(byUsername.DB as any, "AlIcE")).resolves.toEqual({ id: "u1" });
+    const query = String(byUsername.DB.prepare.mock.calls[0]?.[0]);
+    expect(query).toContain("COLLATE NOCASE");
+    expect(query).toContain("is_temporary=0");
+    expect(query).not.toMatch(/password_hash|SELECT\s+\*/i);
+    expect(byUsername.prepared.bind).toHaveBeenCalledWith("AlIcE");
   });
 
   it("returns a boolean for the block relationship query", async () => {

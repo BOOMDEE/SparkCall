@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const session = vi.hoisted(() => ({
-  snapshot: { id: "call-1", state: "CONNECTED", role: "callee", durationMs: 0, muted: false, connectionState: "connected" },
+  snapshot: { id: "call-1", state: "CONNECTED", role: "callee", durationMs: 0, muted: false, connectionState: "connected", connectionMode: "unknown", relayUnavailable: false },
   peer: { callId: "call-1", callerName: "Alice", callerNumber: "SC111", createdAt: 0, expiresAt: Date.now() + 1000 },
   controller: { toggleMute: vi.fn(), hangup: vi.fn(), cancel: vi.fn() },
 }));

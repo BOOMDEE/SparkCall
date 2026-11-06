@@ -37,6 +37,7 @@ For interactive development, follow the README setup before running `npm run dev
 
 - Keep TypeScript strict, validate inputs and parameterize D1 queries. Do not trust client-supplied caller/owner IDs or internal authorization headers.
 - Authorize every REST mutation and WebSocket entry point; enforce same-origin checks, ownership and blocklists on the server.
+- Keep `/makecall/:username` under authenticated routing and use the existing call-creation API. Resolve only valid, non-temporary, unexpired usernames through parameterized case-insensitive D1 queries; retain rate limits, block, incoming-call preference and busy checks. Do not add anonymous call creation or a public username-lookup endpoint.
 - Use `julianday()` for SQLite comparisons of ISO and SQLite-format timestamps; do not compare incompatible time strings lexicographically.
 - Records are private by default. Publishing is explicit. Filter participant names by consent, redact sensitive metadata and keep public pages `noindex`.
 - Temporary record ownership capabilities must outlive temporary-account cleanup. Store only capability hashes; never substitute predictable IDs for authorization.

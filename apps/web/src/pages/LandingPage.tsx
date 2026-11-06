@@ -1,14 +1,17 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowRight, Clock3, Mic, Phone } from "lucide-react";
+import { ArrowRight, Clock3, Mic } from "lucide-react";
 import { api, type Me } from "../lib/api";
 import { LanguageSwitcher } from "../components/LanguageSwitcher";
+import { BrandLink } from "../components/BrandLink";
 import { SiteFooter } from "../components/SiteFooter";
 import { Button, Notice } from "../components/ui";
+import { useSiteConfiguration } from "../contexts/SiteConfiguration";
 
 export default function LandingPage() {
   const { t } = useTranslation("landing");
+  const siteConfiguration = useSiteConfiguration();
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,12 +33,7 @@ export default function LandingPage() {
     <main className="min-h-screen bg-white text-neutral-950 dark:bg-black dark:text-neutral-100">
       <header className="border-b border-neutral-200 dark:border-neutral-800">
         <div className="mx-auto flex h-16 max-w-[1200px] items-center justify-between px-4 sm:px-6">
-          <Link to="/" aria-label={t("brand.homeLabel")} className="flex items-center gap-2 text-sm font-semibold tracking-tight">
-            <span aria-hidden="true" className="grid h-7 w-7 place-items-center rounded-md bg-neutral-900 text-white dark:bg-white dark:text-black">
-              <Phone size={14} strokeWidth={1.8} />
-            </span>
-            SparkCall
-          </Link>
+          <BrandLink to="/" className="flex items-center gap-2 text-sm font-semibold tracking-tight" markClassName="grid h-7 w-7 place-items-center rounded-md bg-neutral-900 text-white dark:bg-white dark:text-black" iconSize={14} />
           <div className="flex items-center gap-3 sm:gap-5">
             <LanguageSwitcher />
             <nav aria-label={t("navigation.label")} className="flex items-center gap-1">
@@ -76,9 +74,9 @@ export default function LandingPage() {
                   <ArrowRight size={16} aria-hidden="true" />
                 </Button>
               </Link>
-              <Button variant="secondary" disabled={busy} onClick={() => void tryAsGuest()} className="w-full sm:w-auto">
+              {siteConfiguration.temporaryAccounts.enabled && <Button variant="secondary" disabled={busy} onClick={() => void tryAsGuest()} className="w-full sm:w-auto">
                 {busy ? t("actions.starting") : t("actions.temporaryAccount")}
-              </Button>
+              </Button>}
             </div>
           </div>
 
@@ -96,7 +94,7 @@ export default function LandingPage() {
                 <Clock3 size={17} className="mt-0.5 shrink-0 text-neutral-500" aria-hidden="true" />
                 <div>
                   <dt className="text-sm font-medium">{t("details.temporary.title")}</dt>
-                  <dd className="mt-1 text-sm leading-6 text-neutral-500 dark:text-neutral-400">{t("details.temporary.detail")}</dd>
+                  <dd className="mt-1 text-sm leading-6 text-neutral-500 dark:text-neutral-400">{t("details.temporary.detail", { lifetimeHours: siteConfiguration.temporaryAccounts.lifetimeHours })}</dd>
                 </div>
               </div>
             </dl>
