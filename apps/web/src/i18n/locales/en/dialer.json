@@ -1,7 +1,7 @@
 {
   "eyebrow": "Browser calling",
   "title": "Dialer",
-  "detail": "Start a private browser call with a SparkCall number or username link. Your microphone is requested only when audio is needed.",
+  "detail": "Enter a SparkCall username or number to start a private browser call. Your microphone is requested only when audio is needed.",
   "sections": {
     "placeCall": "Place a call",
     "currentCall": "Current call",
@@ -9,9 +9,9 @@
   },
   "form": {
     "prompt": "Who do you want to call?",
-    "numberLabel": "SparkCall number",
-    "numberPlaceholder": "For example: SC888",
-    "numberHint": "Numbers are case-sensitive. Enter the recipient’s exact SparkCall number.",
+    "numberLabel": "SparkCall username or number",
+    "numberPlaceholder": "For example: alice or SC888",
+    "numberHint": "Enter the recipient’s username or exact number. If both match, the number is used first.",
     "usernamePrompt": "Calling {{username}}",
     "usernameHint": "This link starts a live call to the SparkCall account {{username}}. You can cancel while it rings.",
     "privacyNote": "Audio stays between callers through encrypted WebRTC.",
@@ -110,7 +110,7 @@
     "failureHint": "When the network drops, the caller makes up to two automatic recovery attempts. If recovery fails, check your network and this deployment’s TURN configuration before calling again."
   },
   "errors": {
-    "missingNumber": "Enter a SparkCall number before calling.",
+    "missingNumber": "Enter a SparkCall username or number before calling.",
     "alreadyOnCall": "A call is already in progress. End it before retrying this username link.",
     "callFailed": "Could not start the call. {{detail}}",
     "preferencesLoading": "Loading call preferences. Calling is temporarily unavailable.",

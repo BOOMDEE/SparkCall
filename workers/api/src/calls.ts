@@ -44,9 +44,10 @@ async function createCall(request: Request, env: Env, ctx?: ExecutionContext): P
     callee = await findByUsername(env.DB, targetUsername);
     if (!callee) return error("SparkCall username not found", 404, "USERNAME_NOT_FOUND");
   } else {
-    if (!validDialNumber(number)) return error("Enter a valid SparkCall number", 400, "INVALID_NUMBER");
-    callee = await findByNumber(env.DB, number);
-    if (!callee) return error("SparkCall number not found", 404, "NUMBER_NOT_FOUND");
+    if (!validDialNumber(number) && !validUsername(number)) return error("Enter a valid SparkCall number or username", 400, "INVALID_NUMBER");
+    if (validDialNumber(number)) callee = await findByNumber(env.DB, number);
+    if (!callee && validUsername(number)) callee = await findByUsername(env.DB, number);
+    if (!callee) return error("SparkCall number or username not found", 404, "NUMBER_NOT_FOUND");
   }
   if (callee.id === caller.id) return error("You cannot call yourself", 400, "SELF_CALL");
   if (await isBlocked(env.DB, caller.id, callee.id) || await isBlocked(env.DB, callee.id, caller.id)) return error("This call is not allowed", 403, "CALL_BLOCKED");

@@ -11,6 +11,10 @@ unreleased development version; this file does not announce a production rollout
   private/shareable records, audio preferences and usage views.
 - Cloudflare Worker API, D1 migrations, signaling/presence Durable Objects,
   server-issued TURN credentials and optional sampled usage analytics.
+- Per-account and bulk monthly TURN relay limits, plus administrator-only
+  temporary-account usage estimates; unavailable Analytics remains fail-open.
+- Direct username dialing from the authenticated call field, alongside
+  username call links; exact number matches take precedence.
 - Authentication, validation and call-entry unit tests plus an isolated local
   Worker/D1 HTTP integration runner in CI.
 - Browser-local do-not-disturb and optional generic missed-call notifications;
@@ -22,6 +26,8 @@ unreleased development version; this file does not announce a production rollout
 
 - PBKDF2 Base64url decoding and mixed-format timestamp expiry comparisons.
 - Cross-origin call creation and an invalid pre-accept connection transition.
+- Cloudflare TURN Analytics now receives GraphQL Date bounds in `YYYY-MM-DD`
+  format; timestamp bounds could prevent usage estimates and snapshots from loading.
 - Temporary-user cleanup cascading into independently owned records; record
   ownership capabilities and captured call metadata now survive user removal.
 

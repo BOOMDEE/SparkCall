@@ -18,7 +18,7 @@ vi.mock("./database", () => ({
   isBlocked,
   json: (value: unknown, status = 200) => new Response(JSON.stringify(value), { status }),
   now: () => "2026-11-02T10:00:00.000Z",
-  validDialNumber: () => true,
+  validDialNumber: (value: string) => /^[A-Za-z0-9]{1,32}$/.test(value) || /^SC-TMP-[A-F0-9]{10}$/.test(value),
   validUsername,
 }));
 
@@ -137,6 +137,27 @@ describe("realtime call authorization and activity checks", () => {
     expect(findByUsername).toHaveBeenCalledWith(db, "AlIcE");
     expect(findByNumber).not.toHaveBeenCalled();
     await expect(response?.json()).resolves.toMatchObject({ userId: "callee", targetNumber: "SC-CALLEE", status: "CALLING" });
+    expect(presence.stub.fetch).toHaveBeenCalledWith("https://presence.internal/invite", expect.objectContaining({ method: "POST" }));
+  });
+
+  it("resolves a manually entered username after an exact number lookup misses", async () => {
+    findByNumber.mockResolvedValueOnce(null);
+    const db = {
+      prepare: vi.fn(() => ({ bind: vi.fn(() => ({
+        first: vi.fn().mockResolvedValue(null),
+        run: vi.fn().mockResolvedValue({ success: true }),
+      })) })),
+    };
+    const presence = namespace();
+    const response = await handleRealtimeApi(new Request("https://app.example/api/calls", {
+      method: "POST",
+      headers: { Origin: "https://app.example", "Content-Type": "application/json" },
+      body: JSON.stringify({ number: "Alice" }),
+    }), env(db, presence));
+
+    expect(response?.status).toBe(201);
+    expect(findByNumber).toHaveBeenCalledWith(db, "Alice");
+    expect(findByUsername).toHaveBeenCalledWith(db, "Alice");
     expect(presence.stub.fetch).toHaveBeenCalledWith("https://presence.internal/invite", expect.objectContaining({ method: "POST" }));
   });
 
