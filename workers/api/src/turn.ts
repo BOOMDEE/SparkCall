@@ -112,8 +112,9 @@ async function queryEgress(env: Env, customIdentifier?: string): Promise<number>
   if (!env.CLOUDFLARE_ACCOUNT_ID || !env.TURN_KEY_ID || !env.TURN_ANALYTICS_API_TOKEN) throw new Error("TURN analytics is not configured for this TURN key");
   const { start, end } = currentMonthRange();
   const account = JSON.stringify(env.CLOUDFLARE_ACCOUNT_ID);
-  const startArg = JSON.stringify(start);
-  const endArg = JSON.stringify(end);
+  // TURN's date filters require GraphQL Date (YYYY-MM-DD), not ISO timestamps.
+  const startArg = JSON.stringify(start.slice(0, 10));
+  const endArg = JSON.stringify(end.slice(0, 10));
   const identityFilter = `, keyId: ${JSON.stringify(env.TURN_KEY_ID)}${customIdentifier ? `, customIdentifier: ${JSON.stringify(customIdentifier)}` : ""}`;
   const grouping = customIdentifier
     ? `limit: 1\n          filter: { date_geq: ${startArg}, date_leq: ${endArg}${identityFilter} }\n          orderBy: [customIdentifier_ASC]`

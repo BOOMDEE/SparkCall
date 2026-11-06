@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { getPlatformTurnLimitStatus, getPlatformTurnUsage, getPublicTurnUsage, getUserTurnUsage } from "./turn";
 
-afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 function analyticsResponse(egressBytes: number) {
   return new Response(JSON.stringify({
@@ -40,6 +40,27 @@ describe("public TURN usage privacy boundary", () => {
 });
 
 describe("SparkCall deployment TURN cap scope", () => {
+  it.each([
+    ["2026-11-30T23:59:59.999Z", "2026-11-01", "2026-11-30"],
+    ["2026-12-01T00:00:00.001Z", "2026-12-01", "2026-12-01"],
+  ])("uses GraphQL Date calendar bounds at %s", async (instant, start, end) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(instant));
+    const fetchMock = vi.fn().mockResolvedValue(analyticsResponse(0));
+    vi.stubGlobal("fetch", fetchMock);
+    const usage = await getPlatformTurnUsage({
+      CLOUDFLARE_ACCOUNT_ID: `date-format-${end}`,
+      TURN_KEY_ID: "date-format-key",
+      TURN_ANALYTICS_API_TOKEN: "test-only-token",
+      TURN_PLATFORM_MONTHLY_LIMIT_BYTES: "800000000000",
+    } as any);
+    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as { query: string };
+    expect(body.query).toContain(`date_geq: "${start}"`);
+    expect(body.query).toContain(`date_leq: "${end}"`);
+    expect(body.query).not.toMatch(/date_(?:geq|leq): "[^"]*T/);
+    expect(usage).toMatchObject({ available: true, month: start.slice(0, 7), usedBytes: 0 });
+  });
+
   it.each([0, 799_999_999_999, 800_000_000_000])("compares a monthly sample of %s bytes to the 800 GB threshold", async (usedBytes) => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(analyticsResponse(usedBytes)));
     const status = await getPlatformTurnLimitStatus({
