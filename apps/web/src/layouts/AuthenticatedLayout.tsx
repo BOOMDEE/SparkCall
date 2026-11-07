@@ -4,6 +4,7 @@ import { Activity, Ban, History, LayoutDashboard, LogOut, Menu, Mic, MicOff, Moo
 import { api, type Me } from "../lib/api";
 import { formatDate } from "../lib/format";
 import { Button, Notice, useFocusTrap } from "../components/ui";
+import { SkipLink } from "../components/common";
 import { LanguageSwitcher } from "../components/LanguageSwitcher";
 import { SiteFooter } from "../components/SiteFooter";
 import { CallSessionProvider, useCallSession } from "../contexts/CallSession";
@@ -41,9 +42,9 @@ export function ActiveCallControls({ onOpenDialer }: { onOpenDialer: () => void 
   if (TERMINAL.has(call.state)) return null;
   const label = call.role === "callee" ? (session.peer?.callerName || session.peer?.callerNumber || t("call.incomingCaller")) : t("call.outgoing");
   const ending = call.role === "caller" && call.state !== "CONNECTED";
-  return <div className="border-b border-neutral-200 bg-neutral-50 px-4 py-2 dark:border-neutral-800 dark:bg-neutral-950" role="region" aria-label={t("call.controls") }>
+  return <div className="sc-active-call border-b border-neutral-200 bg-neutral-50 px-4 py-2 dark:border-neutral-800 dark:bg-neutral-950" role="region" aria-label={t("call.controls") }>
     <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-3">
-      <button className="min-w-0 text-left" onClick={onOpenDialer}><span className="block truncate text-sm font-medium">{label}</span><span className="block text-xs text-neutral-500" aria-live="polite" aria-atomic="true">{t(`call.states.${call.state}`, { defaultValue: call.state.toLowerCase() })}</span></button>
+      <button className="sc-active-call-label min-w-0 text-left" onClick={onOpenDialer}><span className="block truncate text-sm font-medium">{label}</span><span className="block text-xs text-neutral-500" aria-live="polite" aria-atomic="true">{t(`call.states.${call.state}`, { defaultValue: call.state.toLowerCase() })}</span></button>
       <div className="flex shrink-0 gap-1.5">
         <Button variant="secondary" className="px-2" aria-label={call.muted ? t("call.unmute") : t("call.mute")} onClick={() => session.controller?.toggleMute()}>{call.muted ? <MicOff size={15} aria-hidden="true" /> : <Mic size={15} aria-hidden="true" />}</Button>
         <Button variant="danger" className="px-2" aria-label={ending ? t("call.cancel") : t("call.hangUp")} onClick={() => ending ? session.controller?.cancel() : session.controller?.hangup()}><PhoneOff size={15} aria-hidden="true" /></Button>
@@ -72,7 +73,7 @@ function Workspace({ me: initialMe }: { me: Me }) {
   useEffect(() => {
     const apply = (theme: string) => {
       const dark = theme === "dark" || (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
-      document.documentElement.classList.toggle("dark", dark); setIsDark(dark);
+      document.documentElement.classList.toggle("dark", dark); document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#000000" : "#ffffff"); setIsDark(dark);
     };
     apply(session.preferences.theme);
     if (session.preferences.theme !== "system") return;
@@ -85,24 +86,25 @@ function Workspace({ me: initialMe }: { me: Me }) {
   async function toggleTheme() {
     const theme = isDark ? "light" : "dark";
     await session.updatePreferences({ theme }).catch(() => session.clearError());
-    document.documentElement.classList.toggle("dark", theme === "dark"); setIsDark(theme === "dark");
+    document.documentElement.classList.toggle("dark", theme === "dark"); document.querySelector('meta[name="theme-color"]')?.setAttribute("content", theme === "dark" ? "#000000" : "#ffffff"); setIsDark(theme === "dark");
   }
 
-  return <div className="min-h-screen bg-white text-neutral-900 dark:bg-black dark:text-neutral-100">
-    <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-neutral-200 bg-white/95 px-4 backdrop-blur-sm dark:border-neutral-800 dark:bg-black/95 lg:px-8">
+  return <div className="sc-workspace min-h-screen bg-white text-neutral-900 dark:bg-black dark:text-neutral-100">
+    <SkipLink targetId="workspace-content" />
+    <header className="sc-topbar sticky top-0 z-20 flex h-14 items-center justify-between border-b border-neutral-200 bg-white/95 px-4 backdrop-blur-sm dark:border-neutral-800 dark:bg-black/95 lg:px-8">
       <div className="flex items-center gap-3">
-        <button ref={menuButtonRef} className="focus-ring rounded p-1 lg:hidden" aria-label={mobile ? t("actions.closeNavigation") : t("actions.openNavigation")} aria-expanded={mobile} aria-controls="main-navigation" onClick={() => setMobile(!mobile)}>{mobile ? <X size={19} aria-hidden="true" /> : <Menu size={19} aria-hidden="true" />}</button>
+        <button ref={menuButtonRef} className="sc-menu-toggle focus-ring rounded p-1 lg:hidden" aria-label={mobile ? t("actions.closeNavigation") : t("actions.openNavigation")} aria-expanded={mobile} aria-controls="main-navigation" onClick={() => setMobile(!mobile)}>{mobile ? <X size={19} aria-hidden="true" /> : <Menu size={19} aria-hidden="true" />}</button>
         <BrandLink to="/dashboard" className="flex items-center gap-2 text-sm font-semibold tracking-tight" markClassName="grid h-6 w-6 place-items-center rounded bg-neutral-900 text-white dark:bg-white dark:text-black" iconSize={13} filled />
       </div>
-      <div className="flex items-center gap-1.5"><span className="hidden items-center gap-1.5 px-2 text-xs text-neutral-500 sm:inline-flex"><span className={`h-1.5 w-1.5 rounded-full ${session.online ? "bg-green-500" : "bg-neutral-400"}`} aria-hidden="true" />{session.online ? t("status.online") : t("status.offline")}</span><LanguageSwitcher /><Button variant="ghost" className="px-2" aria-label={isDark ? t("actions.switchToLight") : t("actions.switchToDark")} onClick={() => void toggleTheme()}>{isDark ? <Sun size={16} aria-hidden="true" /> : <Moon size={16} aria-hidden="true" />}</Button><div className="ml-1 grid h-7 w-7 place-items-center rounded-full border border-neutral-200 bg-neutral-50 text-xs font-medium dark:border-neutral-800 dark:bg-neutral-900" title={me.displayName}>{(me.displayName || me.username || "?").slice(0, 1).toUpperCase()}</div><Button variant="ghost" className="px-2" aria-label={t("actions.signOut")} onClick={() => void logout()}><LogOut size={16} aria-hidden="true" /></Button></div>
+      <div className="flex items-center gap-1.5"><span className="hidden items-center gap-1.5 px-2 text-xs text-neutral-500 sm:inline-flex"><span className={`h-1.5 w-1.5 rounded-full ${session.online ? "bg-green-500" : "bg-neutral-400"}`} aria-hidden="true" />{session.online ? t("status.online") : t("status.offline")}</span><LanguageSwitcher /><Button variant="ghost" className="px-2" aria-label={isDark ? t("actions.switchToLight") : t("actions.switchToDark")} onClick={() => void toggleTheme()}>{isDark ? <Sun size={16} aria-hidden="true" /> : <Moon size={16} aria-hidden="true" />}</Button><div className="sc-user-avatar ml-1 grid h-7 w-7 place-items-center rounded-full border border-neutral-200 bg-neutral-50 text-xs font-medium dark:border-neutral-800 dark:bg-neutral-900" title={me.displayName}>{(me.displayName || me.username || "?").slice(0, 1).toUpperCase()}</div><Button variant="ghost" className="px-2" aria-label={t("actions.signOut")} onClick={() => void logout()}><LogOut size={16} aria-hidden="true" /></Button></div>
     </header>
     <ActiveCallControls onOpenDialer={() => navigate("/call")} />
     <div className="mx-auto flex max-w-[1440px]">
-      <aside id="main-navigation" ref={navRef} className={`${mobile ? "block" : "hidden"} absolute inset-x-0 top-14 z-10 border-b border-neutral-200 bg-white p-3 lg:static lg:block lg:w-56 lg:shrink-0 lg:border-0 lg:border-r lg:bg-transparent lg:p-5 dark:border-neutral-800 dark:bg-black`} aria-hidden={mobile ? undefined : false}>
-        <nav className="space-y-0.5" aria-label={t("navigation.label")}>{NAV.map(([to, key, Icon]) => <NavLink key={to} to={to} onClick={() => setMobile(false)} className={({ isActive }) => `flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors ${isActive ? "bg-neutral-100 font-medium dark:bg-neutral-900" : "text-neutral-500 hover:bg-neutral-50 hover:text-neutral-900 dark:hover:bg-neutral-900 dark:hover:text-white"}`}><Icon size={16} aria-hidden="true" />{t(`navigation.${key}`)}</NavLink>)}</nav>
-        <div className="mt-7 border-t border-neutral-200 pt-4 text-xs text-neutral-500 dark:border-neutral-800"><p className="px-3 font-medium text-neutral-700 dark:text-neutral-300">{me.number || t("identity.noNumber")}</p><p className="mt-1 px-3">{me.temporary ? t("identity.temporary") : t("identity.permanent")}</p>{me.temporary && me.expiresAt && <p className="mt-1 px-3">{t("identity.expires", { date: formatDate(me.expiresAt, i18n.language) })}</p>}</div>
+      <aside id="main-navigation" ref={navRef} className={`sc-sidebar ${mobile ? "block" : "hidden"} absolute inset-x-0 top-14 z-10 border-b border-neutral-200 bg-white p-3 lg:static lg:block lg:w-56 lg:shrink-0 lg:border-0 lg:border-r lg:bg-transparent lg:p-5 dark:border-neutral-800 dark:bg-black`} aria-hidden={mobile ? undefined : false}>
+        <nav className="space-y-0.5" aria-label={t("navigation.label")}>{NAV.map(([to, key, Icon]) => <NavLink key={to} to={to} onClick={() => setMobile(false)} className={({ isActive }) => `sc-nav-link flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors ${isActive ? "bg-neutral-100 font-medium dark:bg-neutral-900" : "text-neutral-500 hover:bg-neutral-50 hover:text-neutral-900 dark:hover:bg-neutral-900 dark:hover:text-white"}`}><Icon size={16} aria-hidden="true" />{t(`navigation.${key}`)}</NavLink>)}</nav>
+        <div className="sc-identity mt-7 border-t border-neutral-200 pt-4 text-xs text-neutral-500 dark:border-neutral-800"><p className="px-3 font-medium text-neutral-700 dark:text-neutral-300">{me.number || t("identity.noNumber")}</p><p className="mt-1 px-3">{me.temporary ? t("identity.temporary") : t("identity.permanent")}</p>{me.temporary && me.expiresAt && <p className="mt-1 px-3">{t("identity.expires", { date: formatDate(me.expiresAt, i18n.language) })}</p>}</div>
       </aside>
-      <main className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8">{session.error && <div className="mb-5 flex items-start justify-between gap-3" role="alert"><Notice>{t("errors.session", { detail: session.error })}</Notice><Button variant="ghost" className="shrink-0 px-2" aria-label={t("actions.dismissError")} onClick={session.clearError}><X size={16} aria-hidden="true" /></Button></div>}<Outlet context={{ me, setMe }} /></main>
+      <main id="workspace-content" tabIndex={-1} className="sc-main min-w-0 flex-1 p-4 sm:p-6 lg:p-8">{session.error && <div className="mb-5 flex items-start justify-between gap-3" role="alert"><Notice>{t("errors.session", { detail: session.error })}</Notice><Button variant="ghost" className="shrink-0 px-2" aria-label={t("actions.dismissError")} onClick={session.clearError}><X size={16} aria-hidden="true" /></Button></div>}<Outlet context={{ me, setMe }} /></main>
     </div>
     <SiteFooter />
   </div>;

@@ -49,7 +49,7 @@
     "notClaimed": "Not claimed",
     "temporaryNumber": "Temporary accounts use an automatically generated number and cannot claim a custom number.",
     "chooseNumber": "Choose a number",
-    "numberPlaceholder": "Letters and numbers only; case-sensitive",
+    "numberPlaceholder": "Letters and numbers only; case-sensitive…",
     "available": "Available",
     "unavailable": "Unavailable",
     "numberSaved": "SparkCall number saved.",

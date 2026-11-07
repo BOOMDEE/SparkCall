@@ -7,6 +7,7 @@ import { LanguageSwitcher } from "../components/LanguageSwitcher";
 import { BrandLink } from "../components/BrandLink";
 import { SiteFooter } from "../components/SiteFooter";
 import { Button, Field, Notice } from "../components/ui";
+import { SkipLink } from "../components/common";
 import { useSiteConfiguration } from "../contexts/SiteConfiguration";
 
 export default function AuthPage({ mode }: { mode: "login" | "register" }) {
@@ -45,8 +46,9 @@ export default function AuthPage({ mode }: { mode: "login" | "register" }) {
   }
 
   return (
-    <main className="flex min-h-screen flex-col bg-white text-neutral-950 dark:bg-black dark:text-neutral-100">
-      <header className="border-b border-neutral-200 dark:border-neutral-800">
+    <main id="main-content" tabIndex={-1} className="sc-auth flex min-h-screen flex-col bg-white text-neutral-950 dark:bg-black dark:text-neutral-100">
+      <SkipLink />
+      <header className="sc-public-header border-b border-neutral-200 dark:border-neutral-800">
         <div className="mx-auto flex h-14 w-full max-w-[1200px] items-center justify-between px-4 sm:px-6">
           <BrandLink to="/" className="flex items-center gap-2 text-sm font-semibold tracking-tight" markClassName="grid h-6 w-6 place-items-center rounded-md bg-neutral-900 text-white dark:bg-white dark:text-black" iconSize={13} filled />
           <LanguageSwitcher />
@@ -64,16 +66,17 @@ export default function AuthPage({ mode }: { mode: "login" | "register" }) {
               <span aria-hidden="true" className="h-px w-6 bg-neutral-400 dark:bg-neutral-600" />
               {t("eyebrow")}
             </p>
-            <h1 className="mt-5 text-3xl font-semibold tracking-[-0.04em] sm:text-4xl">{t(`${copy}.title`)}</h1>
+            <h1 className="sc-auth-title mt-5 text-3xl font-semibold tracking-[-0.04em] sm:text-4xl">{t(`${copy}.title`)}</h1>
             <p className="mt-3 max-w-md text-sm leading-6 text-neutral-500 dark:text-neutral-400">{t(`${copy}.detail`)}</p>
 
-            <section className="mt-8 rounded-md border border-neutral-200 p-5 dark:border-neutral-800 sm:p-6" aria-labelledby="auth-form-title">
+            <section className="sc-auth-card mt-8 rounded-md border border-neutral-200 p-5 dark:border-neutral-800 sm:p-6" aria-labelledby="auth-form-title">
               <h2 id="auth-form-title" className="sr-only">{t(`${copy}.title`)}</h2>
               {error && <div className="mb-5"><Notice>{error}</Notice></div>}
               <form onSubmit={(event) => void submit(event)} className="space-y-4">
                 <Field
                   label={t("fields.username")}
                   aria-label={t("fields.username")}
+                  spellCheck={false}
                   placeholder={t("fields.usernamePlaceholder")}
                   autoComplete="username"
                   required

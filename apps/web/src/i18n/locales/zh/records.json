@@ -6,7 +6,7 @@
   "security": { "ownerNote": "只有已登录的所有者可以管理这些记录。临时账户可能还会获得安全且绑定当前浏览器的恢复能力；它不会显示在页面上，也不会包含在记录 URL 中。" },
   "create": { "title": "创建私密通话记录", "detail": "记录会以私密状态开始。是否以及何时公开，由你决定。", "privacyNote": "不要填写账户邮箱、凭据或私密会话数据。记录永远不会存储通话音频。", "capabilityNote": "如果此临时会话符合条件，管理恢复能力会保存在安全的 HttpOnly 浏览器 Cookie 中，不会出现在页面或公开链接里。" },
   "fields": { "slug": "公开 URL slug", "title": "标题", "associatedCall": "关联通话（可选）", "description": "描述", "notes": "备注", "tags": "标签（用逗号分隔）", "expiration": "过期时间（可选）", "participants": "参与者显示名称（每行一个）", "metadata": "自定义元数据（JSON 对象）" },
-  "placeholders": { "slug": "project-meeting", "title": "项目同步", "tags": "规划, 项目", "participants": "除非你在下方确认同意，否则不会添加名称。" },
+  "placeholders": { "slug": "例如：project-meeting…", "title": "例如：项目同步…", "tags": "例如：规划, 项目…", "participants": "除非你在下方确认同意，否则不会添加名称。" },
   "options": { "noLinkedCall": "不关联通话", "incoming": "呼入", "outgoing": "呼出" },
   "consent": { "create": "如果之后公开此记录，我确认已获得包含这些显示名称的适当同意。没有同意时，不会存储名称。", "publicActive": "公开链接已启用", "keepPrivate": "保持此记录私密", "publicWarning": "公开后，此记录及参与者信息会通过公开 URL 可见。保存前请确认参与者同意。", "privateNote": "在你明确公开前，此记录会保持私密。" },
   "status": { "public": "公开", "private": "私密", "expired": "已过期" },

@@ -6,7 +6,7 @@
     "title": "Block a number",
     "detail": "Enter a SparkCall number to prevent future calls between you and that user.",
     "label": "SparkCall number",
-    "placeholder": "Number to block",
+    "placeholder": "e.g. +1 202 555 0123…",
     "submit": "Block number",
     "submitting": "Blocking…"
   },

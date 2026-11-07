@@ -1,12 +1,12 @@
-import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, FilePlus2, PhoneCall, Search, SlidersHorizontal } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { type HistoryItem } from "../lib/api";
 import { useResource } from "../hooks/useResource";
 import { formatDate, formatDuration } from "../lib/format";
 import { PageHeader, StatusPill } from "../components/common";
-import { Button, Card, Empty, Notice } from "../components/ui";
+import { Button, ButtonLink, Card, Empty, Notice } from "../components/ui";
 
 type StatusTone = "neutral" | "success" | "warning" | "error";
 
@@ -19,6 +19,12 @@ function statusTone(status: string): StatusTone {
 
 function translatedValue(t: (key: string, options?: Record<string, unknown>) => string, group: string, value: string) {
   return t(`${group}.${value}`, { defaultValue: value });
+}
+
+type HistoryType = "all" | "incoming" | "outgoing" | "missed";
+function readHistoryType(params: URLSearchParams): HistoryType {
+  const value = params.get("type");
+  return value === "incoming" || value === "outgoing" || value === "missed" ? value : "all";
 }
 
 function ResourceMessage({ loading, error, empty, emptyTitle, emptyDetail, children, retry, retryLabel }: {
@@ -39,8 +45,22 @@ function ResourceMessage({ loading, error, empty, emptyTitle, emptyDetail, child
 
 export default function HistoryPage() {
   const { t, i18n } = useTranslation("history");
-  const [type, setType] = useState("all");
-  const [query, setQuery] = useState("");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [type, setType] = useState<HistoryType>(() => readHistoryType(searchParams));
+  const [query, setQuery] = useState(() => searchParams.get("q") || "");
+  useEffect(() => {
+    setType(readHistoryType(searchParams));
+    setQuery(searchParams.get("q") || "");
+  }, [searchParams]);
+  function updateFilter(key: "q" | "type", value: string) {
+    const next = new URLSearchParams(searchParams);
+    if (!value || (key === "type" && value === "all")) next.delete(key);
+    else next.set(key, value);
+    if (key === "type" && readHistoryType(next) !== value) return;
+    setSearchParams(next, { replace: true });
+    if (key === "q") setQuery(value);
+    else setType(readHistoryType(next));
+  }
   const path = `/api/history?limit=200${type === "all" ? "" : `&type=${type}`}${query ? `&q=${encodeURIComponent(query)}` : ""}`;
   const resource = useResource<HistoryItem[]>(path);
 
@@ -50,12 +70,12 @@ export default function HistoryPage() {
       <label className="relative block min-w-0 flex-1 sm:max-w-sm">
         <span className="sr-only">{t("filters.searchLabel")}</span>
         <Search size={16} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
-        <input aria-label={t("filters.searchLabel")} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("filters.searchPlaceholder")} className="focus-ring w-full rounded-md border border-neutral-200 bg-transparent py-2 pl-9 pr-3 text-sm outline-none dark:border-neutral-800" />
+        <input name="history-search" autoComplete="off" aria-label={t("filters.searchLabel")} value={query} onChange={(event) => updateFilter("q", event.target.value)} placeholder={t("filters.searchPlaceholder")} className="focus-ring w-full rounded-md border border-neutral-200 bg-transparent py-2 pl-9 pr-3 text-sm outline-none dark:border-neutral-800" />
       </label>
       <label className="flex items-center gap-2 text-sm text-neutral-500">
         <SlidersHorizontal size={16} aria-hidden="true" />
         <span className="sr-only">{t("filters.typeLabel")}</span>
-        <select aria-label={t("filters.typeLabel")} value={type} onChange={(event) => setType(event.target.value)} className="focus-ring rounded-md border border-neutral-200 bg-transparent px-3 py-2 text-sm text-neutral-900 outline-none dark:border-neutral-800 dark:text-white">
+        <select name="history-type" autoComplete="off" aria-label={t("filters.typeLabel")} value={type} onChange={(event) => updateFilter("type", event.target.value)} className="focus-ring rounded-md border border-neutral-200 bg-transparent px-3 py-2 text-sm text-neutral-900 outline-none dark:border-neutral-800 dark:text-white">
           <option value="all">{t("filters.all")}</option>
           <option value="incoming">{t("filters.incoming")}</option>
           <option value="outgoing">{t("filters.outgoing")}</option>
@@ -94,7 +114,7 @@ export function HistoryDetailPage() {
   const participant = call ? (call.direction === "outgoing" ? call.recipient : call.caller) : null;
 
   return <>
-    <PageHeader eyebrow={t("eyebrow")} title={t("detailTitle")} detail={call ? `${translatedValue(t, "direction", call.direction)} · ${translatedValue(t, "status", call.status)}` : t("detailDescription")} action={<Link to="/history"><Button variant="secondary"><ArrowLeft size={15} aria-hidden="true" />{t("actions.back")}</Button></Link>} />
+    <PageHeader eyebrow={t("eyebrow")} title={t("detailTitle")} detail={call ? `${translatedValue(t, "direction", call.direction)} · ${translatedValue(t, "status", call.status)}` : t("detailDescription")} action={<ButtonLink to="/history" variant="secondary"><ArrowLeft size={15} aria-hidden="true" />{t("actions.back")}</ButtonLink>} />
     <ResourceMessage loading={resource.loading} error={resource.error ? t("errors.loadDetail", { detail: resource.error }) : null} empty={!resource.loading && !resource.error && !call} emptyTitle={t("empty.detailTitle")} emptyDetail={t("empty.detailDescription")} retry={resource.refresh} retryLabel={t("actions.retry")}>
       {call && <Card className="max-w-2xl p-5 sm:p-7"><dl className="grid gap-5 sm:grid-cols-2">
         <div><dt className="text-xs text-neutral-500">{t("fields.participant")}</dt><dd className="mt-1 text-sm">{participant || t("unknownParticipant")}</dd></div>
@@ -103,7 +123,7 @@ export function HistoryDetailPage() {
         <div><dt className="text-xs text-neutral-500">{t("fields.duration")}</dt><dd className="mt-1 text-sm">{call.durationSeconds != null ? formatDuration(call.durationSeconds) : t("notAvailable")}</dd></div>
         <div><dt className="text-xs text-neutral-500">{t("fields.started")}</dt><dd className="mt-1 text-sm">{formatDate(call.startedAt, i18n.language)}</dd></div>
         <div><dt className="text-xs text-neutral-500">{t("fields.ended")}</dt><dd className="mt-1 text-sm">{formatDate(call.endedAt, i18n.language)}</dd></div>
-      </dl><div className="mt-6 flex flex-wrap gap-2"><Link to={`/call?number=${encodeURIComponent(call.direction === "outgoing" ? call.recipient || "" : call.caller || "")}`}><Button><PhoneCall size={15} aria-hidden="true" />{t("actions.callAgain")}</Button></Link><Link to={`/records?callId=${encodeURIComponent(call.id)}`}><Button variant="secondary"><FilePlus2 size={15} aria-hidden="true" />{t("actions.createRecord")}</Button></Link></div><p className="mt-4 text-xs leading-5 text-neutral-500">{t("privacyNote")}</p></Card>}
+      </dl><div className="mt-6 flex flex-wrap gap-2"><ButtonLink to={`/call?number=${encodeURIComponent(call.direction === "outgoing" ? call.recipient || "" : call.caller || "")}`}><PhoneCall size={15} aria-hidden="true" />{t("actions.callAgain")}</ButtonLink><ButtonLink to={`/records?callId=${encodeURIComponent(call.id)}`} variant="secondary"><FilePlus2 size={15} aria-hidden="true" />{t("actions.createRecord")}</ButtonLink></div><p className="mt-4 text-xs leading-5 text-neutral-500">{t("privacyNote")}</p></Card>}
     </ResourceMessage>
   </>;
 }

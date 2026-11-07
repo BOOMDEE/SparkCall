@@ -49,7 +49,7 @@
     "notClaimed": "尚未申请",
     "temporaryNumber": "临时账号使用自动生成的号码，不能申请自定义号码。",
     "chooseNumber": "选择号码",
-    "numberPlaceholder": "仅限字母和数字；区分大小写",
+    "numberPlaceholder": "仅限字母和数字；区分大小写…",
     "available": "可用",
     "unavailable": "不可用",
     "numberSaved": "SparkCall 号码已保存。",

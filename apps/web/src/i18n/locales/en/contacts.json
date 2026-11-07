@@ -28,13 +28,13 @@
     "favorite": "Favorite contact"
   },
   "placeholders": {
-    "number": "Enter the exact SparkCall number",
-    "name": "Name to show in your contacts",
-    "notes": "Optional notes"
+    "number": "e.g. SC888…",
+    "name": "Name to show in your contacts…",
+    "notes": "Optional notes…"
   },
   "search": {
     "aria": "Search contacts",
-    "placeholder": "Search by name or number",
+    "placeholder": "Search by name or number…",
     "hint": "Name or number"
   },
   "labels": { "favorite": "Favorite" },

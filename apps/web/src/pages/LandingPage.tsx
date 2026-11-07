@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { ArrowRight, Clock3, Mic } from "lucide-react";
 import { api, type Me } from "../lib/api";
 import { LanguageSwitcher } from "../components/LanguageSwitcher";
 import { BrandLink } from "../components/BrandLink";
 import { SiteFooter } from "../components/SiteFooter";
-import { Button, Notice } from "../components/ui";
+import { Button, ButtonLink, Notice } from "../components/ui";
+import { SkipLink } from "../components/common";
 import { useSiteConfiguration } from "../contexts/SiteConfiguration";
 
 export default function LandingPage() {
@@ -30,22 +31,19 @@ export default function LandingPage() {
   }
 
   return (
-    <main className="min-h-screen bg-white text-neutral-950 dark:bg-black dark:text-neutral-100">
-      <header className="border-b border-neutral-200 dark:border-neutral-800">
+    <main id="main-content" tabIndex={-1} className="sc-landing min-h-screen bg-white text-neutral-950 dark:bg-black dark:text-neutral-100">
+      <SkipLink />
+      <header className="sc-public-header border-b border-neutral-200 dark:border-neutral-800">
         <div className="mx-auto flex h-16 max-w-[1200px] items-center justify-between px-4 sm:px-6">
           <BrandLink to="/" className="flex items-center gap-2 text-sm font-semibold tracking-tight" markClassName="grid h-7 w-7 place-items-center rounded-md bg-neutral-900 text-white dark:bg-white dark:text-black" iconSize={14} />
           <div className="flex items-center gap-3 sm:gap-5">
             <LanguageSwitcher />
             <nav aria-label={t("navigation.label")} className="flex items-center gap-1">
-              <Link to="/login">
-                <Button variant="ghost">{t("navigation.signIn")}</Button>
-              </Link>
-              <Link to="/register">
-                <Button>
-                  {t("navigation.createAccount")}
-                  <ArrowRight size={15} aria-hidden="true" />
-                </Button>
-              </Link>
+              <ButtonLink to="/login" variant="ghost">{t("navigation.signIn")}</ButtonLink>
+              <ButtonLink to="/register">
+                {t("navigation.createAccount")}
+                <ArrowRight size={15} aria-hidden="true" />
+              </ButtonLink>
             </nav>
           </div>
         </div>
@@ -58,7 +56,7 @@ export default function LandingPage() {
               <span aria-hidden="true" className="h-px w-6 bg-neutral-400 dark:bg-neutral-600" />
               {t("eyebrow")}
             </p>
-            <h1 className="max-w-3xl text-4xl font-semibold tracking-[-0.04em] sm:text-6xl sm:leading-[1.05]">{t("title")}</h1>
+            <h1 className="sc-landing-title max-w-3xl text-4xl font-semibold tracking-[-0.04em] sm:text-6xl sm:leading-[1.05]">{t("title")}</h1>
             <p className="mt-6 max-w-xl text-base leading-7 text-neutral-500 dark:text-neutral-400">{t("description")}</p>
 
             {error && (
@@ -68,12 +66,10 @@ export default function LandingPage() {
             )}
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Link to="/register" className="w-full sm:w-auto">
-                <Button className="w-full sm:w-auto">
-                  {t("actions.createAccount")}
-                  <ArrowRight size={16} aria-hidden="true" />
-                </Button>
-              </Link>
+              <ButtonLink to="/register" className="w-full sm:w-auto">
+                {t("actions.createAccount")}
+                <ArrowRight size={16} aria-hidden="true" />
+              </ButtonLink>
               {siteConfiguration.temporaryAccounts.enabled && <Button variant="secondary" disabled={busy} onClick={() => void tryAsGuest()} className="w-full sm:w-auto">
                 {busy ? t("actions.starting") : t("actions.temporaryAccount")}
               </Button>}

@@ -28,13 +28,13 @@
     "favorite": "收藏联系人"
   },
   "placeholders": {
-    "number": "输入准确的 SparkCall 号码",
-    "name": "显示在联系人中的姓名",
-    "notes": "可选备注"
+    "number": "例如：SC888…",
+    "name": "显示在联系人中的姓名…",
+    "notes": "可选备注…"
   },
   "search": {
     "aria": "搜索联系人",
-    "placeholder": "按姓名或号码搜索",
+    "placeholder": "按姓名或号码搜索…",
     "hint": "姓名或号码"
   },
   "labels": { "favorite": "已收藏" },

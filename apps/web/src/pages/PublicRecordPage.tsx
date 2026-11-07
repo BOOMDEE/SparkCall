@@ -1,15 +1,16 @@
 import { useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { Archive, Check, Clipboard, ExternalLink, Globe2, LockKeyhole, Trash2 } from "lucide-react";
 import { api, type PublicRecord } from "../lib/api";
 import { useResource } from "../hooks/useResource";
 import { formatDate, formatDuration } from "../lib/format";
 import { PageHeader, ResourceState, StatusPill } from "../components/common";
-import { Button, Card, Field, Notice } from "../components/ui";
+import { Button, ButtonLink, Card, Field, Notice } from "../components/ui";
 import { LanguageSwitcher } from "../components/LanguageSwitcher";
 import { BrandLink } from "../components/BrandLink";
 import { SiteFooter } from "../components/SiteFooter";
+import { SkipLink } from "../components/common";
 
 const inputClass = "focus-ring w-full rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm outline-none transition placeholder:text-neutral-400 dark:border-neutral-800 dark:bg-neutral-950 dark:text-white";
 const areaClass = `${inputClass} min-h-20`;
@@ -35,13 +36,14 @@ export default function PublicRecordPage() {
   const statusPublic = ownerCanManage ? Boolean(record?.isPublic) : true;
 
   return <div className="min-h-screen bg-white text-neutral-900 dark:bg-black dark:text-neutral-100">
-    <main className="mx-auto max-w-4xl px-4 py-6 sm:px-6 sm:py-8">
+    <SkipLink />
+    <main id="main-content" tabIndex={-1} className="mx-auto max-w-4xl px-4 py-6 sm:px-6 sm:py-8">
       <header className="mb-8 flex flex-wrap items-center justify-between gap-4 border-b border-neutral-200 pb-4 dark:border-neutral-800">
         <BrandLink to="/" className="flex items-center gap-2 text-sm font-semibold tracking-tight" ariaLabel={t("header.homeAria")} markClassName="grid h-6 w-6 place-items-center rounded bg-neutral-900 text-white dark:bg-white dark:text-black" iconSize={13} filled />
         <div className="flex flex-wrap items-center gap-2">
           <LanguageSwitcher />
           <Button variant="secondary" onClick={() => void copyLink()} aria-label={t("actions.copyLinkAria")}><Clipboard size={14} aria-hidden="true" />{copied ? t("actions.copied") : t("actions.copyLink")}</Button>
-          {ownerCanManage && <Link to="/records"><Button variant="secondary">{t("actions.myRecords")}</Button></Link>}
+          {ownerCanManage && <ButtonLink to="/records" variant="secondary">{t("actions.myRecords")}</ButtonLink>}
         </div>
       </header>
 
@@ -124,14 +126,14 @@ function OwnerEditor({ record, onUpdated, onSlugChanged }: { record: PublicRecor
       <TextArea label={t("fields.description")} value={description} onChange={(event) => setDescription(event.target.value)} maxLength={5000} /><TextArea label={t("fields.notes")} value={notes} onChange={(event) => setNotes(event.target.value)} maxLength={5000} />
       <Field label={t("fields.tags")} value={tags} onChange={(event) => setTags(event.target.value)} /><Field label={t("fields.expiresAt")} type="datetime-local" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} />
       <TextArea label={t("fields.metadata")} value={metadata} onChange={(event) => setMetadata(event.target.value)} mono />
-      <label className="flex items-start gap-2 text-sm sm:col-span-2"><input type="checkbox" checked={isPublic} onChange={(event) => setIsPublic(event.target.checked)} className="mt-1" /> <span>{isPublic ? <><Globe2 size={14} className="mr-1 inline" aria-hidden="true" />{t("consent.publicActive")}</> : <><LockKeyhole size={14} className="mr-1 inline" aria-hidden="true" />{t("consent.keepPrivate")}</>}</span></label>
+      <label className="flex items-start gap-2 text-sm sm:col-span-2"><input name="record-public" autoComplete="off" type="checkbox" checked={isPublic} onChange={(event) => setIsPublic(event.target.checked)} className="mt-1" /> <span>{isPublic ? <><Globe2 size={14} className="mr-1 inline" aria-hidden="true" />{t("consent.publicActive")}</> : <><LockKeyhole size={14} className="mr-1 inline" aria-hidden="true" />{t("consent.keepPrivate")}</>}</span></label>
       <p className="text-xs leading-5 text-neutral-500 sm:col-span-2">{isPublic ? t("consent.publicWarning") : t("consent.privateNote")}</p>
-      <div className="flex flex-wrap gap-2 sm:col-span-2"><Button type="submit" disabled={busy}><Check size={14} aria-hidden="true" />{busy ? t("actions.saving") : t("actions.save")}</Button>{isPublic && <a href={`/callrecords/${encodeURIComponent(slug)}`} target="_blank" rel="noreferrer"><Button type="button" variant="secondary"><ExternalLink size={14} aria-hidden="true" />{t("actions.viewPublic")}</Button></a>}</div>
+      <div className="flex flex-wrap gap-2 sm:col-span-2"><Button type="submit" disabled={busy}><Check size={14} aria-hidden="true" />{busy ? t("actions.saving") : t("actions.save")}</Button>{isPublic && <a className="sc-button focus-ring inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium sc-button-secondary border border-neutral-200 bg-white hover:bg-neutral-50 dark:border-neutral-800 dark:bg-black dark:hover:bg-neutral-900" href={`/callrecords/${encodeURIComponent(slug)}`} target="_blank" rel="noreferrer"><ExternalLink size={14} aria-hidden="true" />{t("actions.viewPublic")}</a>}</div>
     </form>}
     <p className="mt-4 text-xs text-neutral-500">{t("owner.updated", { date: formatDate(record.updatedAt, i18n.language) })}</p>
   </Card>;
 }
 
 function TextArea({ label, mono = false, ...props }: React.TextareaHTMLAttributes<HTMLTextAreaElement> & { label: string; mono?: boolean }) {
-  return <label className="text-sm sm:col-span-2"><span className="mb-1.5 block font-medium">{label}</span><textarea {...props} className={`${areaClass} ${mono ? "font-mono text-xs" : ""}`} /></label>;
+  return <label className="text-sm sm:col-span-2"><span className="mb-1.5 block font-medium">{label}</span><textarea {...props} name={props.name || label} autoComplete={props.autoComplete || "off"} className={`${areaClass} ${mono ? "font-mono text-xs" : ""}`} /></label>;
 }

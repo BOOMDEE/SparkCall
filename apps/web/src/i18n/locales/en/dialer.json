@@ -10,7 +10,7 @@
   "form": {
     "prompt": "Who do you want to call?",
     "numberLabel": "SparkCall username or number",
-    "numberPlaceholder": "For example: alice or SC888",
+    "numberPlaceholder": "e.g. alice or SC888…",
     "numberHint": "Enter the recipient’s username or exact number. If both match, the number is used first.",
     "usernamePrompt": "Calling {{username}}",
     "usernameHint": "This link starts a live call to the SparkCall account {{username}}. You can cancel while it rings.",

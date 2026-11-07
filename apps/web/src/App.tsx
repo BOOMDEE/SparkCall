@@ -1,20 +1,26 @@
+import { lazy, Suspense } from "react";
+import { useTranslation } from "react-i18next";
 import { Navigate, Route, Routes } from "react-router-dom";
-import AuthPage from "./pages/AuthPage";
-import LandingPage from "./pages/LandingPage";
-import DashboardPage from "./pages/DashboardPage";
-import DialerPage from "./pages/DialerPage";
-import { ContactsPage, ContactDetailPage } from "./pages/ContactsPage";
-import HistoryPage, { HistoryDetailPage } from "./pages/HistoryPage";
-import BlockedPage from "./pages/BlockedPage";
-import SettingsLayout from "./pages/SettingsPage";
-import { AuthenticatedLayout } from "./layouts/AuthenticatedLayout";
-import PublicRecordPage from "./pages/PublicRecordPage";
-import RecordsPage from "./pages/RecordsPage";
-import NotFoundPage from "./pages/NotFoundPage";
 import { SiteConfigurationProvider } from "./contexts/SiteConfiguration";
 
+const AuthPage = lazy(() => import("./pages/AuthPage"));
+const LandingPage = lazy(() => import("./pages/LandingPage"));
+const DashboardPage = lazy(() => import("./pages/DashboardPage"));
+const DialerPage = lazy(() => import("./pages/DialerPage"));
+const ContactsPage = lazy(() => import("./pages/ContactsPage").then((module) => ({ default: module.ContactsPage })));
+const ContactDetailPage = lazy(() => import("./pages/ContactsPage").then((module) => ({ default: module.ContactDetailPage })));
+const HistoryPage = lazy(() => import("./pages/HistoryPage"));
+const HistoryDetailPage = lazy(() => import("./pages/HistoryPage").then((module) => ({ default: module.HistoryDetailPage })));
+const BlockedPage = lazy(() => import("./pages/BlockedPage"));
+const SettingsLayout = lazy(() => import("./pages/SettingsPage"));
+const AuthenticatedLayout = lazy(() => import("./layouts/AuthenticatedLayout").then((module) => ({ default: module.AuthenticatedLayout })));
+const PublicRecordPage = lazy(() => import("./pages/PublicRecordPage"));
+const RecordsPage = lazy(() => import("./pages/RecordsPage"));
+const NotFoundPage = lazy(() => import("./pages/NotFoundPage"));
+
 export default function App() {
-  return <SiteConfigurationProvider><Routes>
+  const { t } = useTranslation("common");
+  return <SiteConfigurationProvider><Suspense fallback={<div className="grid min-h-screen place-items-center text-sm text-neutral-500" role="status" aria-live="polite">{t("loading")}</div>}><Routes>
     <Route path="/" element={<LandingPage />} />
     <Route path="/login" element={<AuthPage mode="login" />} />
     <Route path="/register" element={<AuthPage mode="register" />} />
@@ -33,5 +39,5 @@ export default function App() {
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
     </Route>
     <Route path="*" element={<NotFoundPage />} />
-  </Routes></SiteConfigurationProvider>;
+  </Routes></Suspense></SiteConfigurationProvider>;
 }

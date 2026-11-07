@@ -1,7 +1,7 @@
 {
   "brand": { "name": "SparkCall", "homeLabel": "SparkCall home" },
   "navigation": { "label": "Main navigation", "overview": "Overview", "dialer": "Dialer", "contacts": "Contacts", "history": "History", "records": "Call records", "blocked": "Blocked", "settings": "Settings" },
-  "actions": { "openNavigation": "Open navigation", "closeNavigation": "Close navigation", "switchToLight": "Switch to light mode", "switchToDark": "Switch to dark mode", "signOut": "Sign out", "openDialer": "Open dialer", "dismissError": "Dismiss error" },
+  "actions": { "openNavigation": "Open navigation", "closeNavigation": "Close navigation", "switchToLight": "Switch to light mode", "switchToDark": "Switch to dark mode", "signOut": "Sign out", "openDialer": "Open dialer", "dismissError": "Dismiss error", "skipToMain": "Skip to main content" },
   "status": { "online": "Online", "offline": "Offline", "workspace": "Workspace" },
   "identity": { "noNumber": "No number claimed", "temporary": "Temporary account", "permanent": "SparkCall identity", "expires": "Expires {{date}}" },
   "call": { "controls": "Active call controls", "incomingCaller": "Incoming caller", "outgoing": "Outgoing call", "mute": "Mute call", "unmute": "Unmute call", "cancel": "Cancel call", "hangUp": "Hang up call", "states": { "RINGING": "Ringing", "CONNECTING": "Connecting", "CONNECTED": "Connected", "ENDING": "Ending", "IDLE": "Idle", "ENDED": "Ended", "REJECTED": "Rejected", "BUSY": "Busy", "TIMEOUT": "Timed out", "FAILED": "Failed", "CANCELLED": "Cancelled" } },

@@ -4,7 +4,7 @@
   "detail": "Call metadata only. SparkCall does not record call audio.",
   "detailTitle": "Call details",
   "detailDescription": "Metadata for this call.",
-  "filters": { "searchLabel": "Search call history", "searchPlaceholder": "Search by number", "typeLabel": "Filter call history", "all": "All calls", "incoming": "Incoming", "outgoing": "Outgoing", "missed": "Missed" },
+  "filters": { "searchLabel": "Search call history", "searchPlaceholder": "e.g. +1 202 555 0123…", "typeLabel": "Filter call history", "all": "All calls", "incoming": "Incoming", "outgoing": "Outgoing", "missed": "Missed" },
   "table": { "participant": "Participant", "direction": "Direction", "status": "Status", "started": "Started" },
   "fields": { "participant": "Participant", "direction": "Direction", "status": "Status", "duration": "Duration", "started": "Started", "ended": "Ended" },
   "direction": { "incoming": "Incoming", "outgoing": "Outgoing" },

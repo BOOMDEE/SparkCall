@@ -6,7 +6,7 @@
     "title": "封锁号码",
     "detail": "输入 SparkCall 号码，阻止你与该用户之间的后续通话。",
     "label": "SparkCall 号码",
-    "placeholder": "要封锁的号码",
+    "placeholder": "例如：+86 138 0000 0000…",
     "submit": "封锁号码",
     "submitting": "封锁中…"
   },

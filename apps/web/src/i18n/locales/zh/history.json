@@ -4,7 +4,7 @@
   "detail": "仅显示通话元数据。SparkCall 不会录制通话音频。",
   "detailTitle": "通话详情",
   "detailDescription": "此通话的元数据。",
-  "filters": { "searchLabel": "搜索通话历史", "searchPlaceholder": "按号码搜索", "typeLabel": "筛选通话历史", "all": "全部通话", "incoming": "呼入", "outgoing": "呼出", "missed": "未接" },
+  "filters": { "searchLabel": "搜索通话历史", "searchPlaceholder": "例如：+86 138 0000 0000…", "typeLabel": "筛选通话历史", "all": "全部通话", "incoming": "呼入", "outgoing": "呼出", "missed": "未接" },
   "table": { "participant": "参与者", "direction": "方向", "status": "状态", "started": "开始时间" },
   "fields": { "participant": "参与者", "direction": "方向", "status": "状态", "duration": "时长", "started": "开始时间", "ended": "结束时间" },
   "direction": { "incoming": "呼入", "outgoing": "呼出" },

@@ -6,7 +6,7 @@ import { type Contact, type HistoryItem, type Me, type Usage } from "../lib/api"
 import { useResource } from "../hooks/useResource";
 import { formatBytes, formatDate, formatDuration } from "../lib/format";
 import { PageHeader, StatusPill } from "../components/common";
-import { Button, Card, Notice } from "../components/ui";
+import { Button, ButtonLink, Card, Notice } from "../components/ui";
 import { useCallSession } from "../contexts/CallSession";
 
 const inputClass = "focus-ring w-full rounded-md border border-neutral-200 bg-white py-3 pl-10 pr-3 text-sm outline-none transition placeholder:text-neutral-400 dark:border-neutral-800 dark:bg-neutral-950 dark:text-white";
@@ -52,7 +52,7 @@ export default function DashboardPage() {
       eyebrow={t("eyebrow")}
       title={t("title")}
       detail={t("detail")}
-      action={<Link to="/call"><Button><PhoneCall size={15} aria-hidden="true" /> {t("actions.openDialer")}</Button></Link>}
+      action={<ButtonLink to="/call"><PhoneCall size={15} aria-hidden="true" /> {t("actions.openDialer")}</ButtonLink>}
     />
 
     {session.error && <div className="mb-4"><Notice>{t("errors.presence", { detail: session.error })}</Notice></div>}
@@ -94,7 +94,7 @@ export default function DashboardPage() {
         <form className="mt-5 flex flex-col gap-2 sm:flex-row" onSubmit={quickDial}>
           <div className="relative min-w-0 flex-1">
             <Search size={16} className="pointer-events-none absolute left-3 top-3.5 text-neutral-400" aria-hidden="true" />
-            <input aria-label={t("quickDial.aria")} value={number} onChange={(event) => setNumber(event.target.value)} placeholder={t("quickDial.placeholder")} className={inputClass} />
+            <input name="quick-dial-number" autoComplete="off" aria-label={t("quickDial.aria")} value={number} onChange={(event) => setNumber(event.target.value)} placeholder={t("quickDial.placeholder")} className={inputClass} />
           </div>
           <Button type="submit" disabled={!number.trim()}><PhoneCall size={15} aria-hidden="true" /> {t("quickDial.submit")}</Button>
         </form>
@@ -133,7 +133,7 @@ export default function DashboardPage() {
         <div className="p-5">
           {contacts.loading ? <p className="py-3 text-sm text-neutral-500" role="status">{t("states.loading")}</p> : contacts.error ? <Notice>{t("errors.loadContacts", { detail: contacts.error })}</Notice> : !hasContacts ? <div className="py-3"><p className="text-sm font-medium">{t("contacts.emptyTitle")}</p><p className="mt-1 text-sm text-neutral-500">{t("contacts.emptyDetail")}</p></div> : <div className="divide-y divide-neutral-100 dark:divide-neutral-900">{contacts.data?.slice(0, 4).map((contact) => <div key={contact.id} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
             <Link to={`/contacts/${contact.id}`} className="min-w-0 rounded-sm focus-ring"><p className="truncate text-sm font-medium">{contact.name}</p><p className="mt-0.5 text-xs text-neutral-500">{contact.number}</p></Link>
-            <Link to={`/call?number=${encodeURIComponent(contact.number)}`}><Button variant="ghost" className="px-2" aria-label={t("contacts.callAria", { name: contact.name })}><PhoneCall size={15} aria-hidden="true" /></Button></Link>
+            <ButtonLink to={`/call?number=${encodeURIComponent(contact.number)}`} variant="ghost" className="px-2" aria-label={t("contacts.callAria", { name: contact.name })}><PhoneCall size={15} aria-hidden="true" /></ButtonLink>
           </div>)}</div>}
         </div>
       </Card>
@@ -153,7 +153,7 @@ export default function DashboardPage() {
     <section className="mt-5 border-t border-neutral-200 pt-4 dark:border-neutral-800">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="text-sm"><span className="font-medium">{t("usage.label", { month: usage.data?.month || (i18n.language === "zh" ? "本月" : "this month") })}</span>{usage.loading ? <span className="ml-2 text-neutral-500" role="status">{t("states.loading")}</span> : usage.error ? <span className="ml-2 text-neutral-500">{t("errors.loadUsage", { detail: usage.error })}</span> : <span className="ml-2 text-neutral-500">{usage.data?.available ? `${formatBytes(usage.data.usedBytes)} ${t("usage.allowance", { quota: formatBytes(usage.data.quotaBytes) })}` : `— ${t("usage.unavailable")}`}</span>}</div>
-        <div className="flex flex-wrap gap-2"><Link to="/settings/usage" className="text-sm underline underline-offset-4">{t("actions.usageDetails")}</Link><Link to="/settings/audio"><Button variant="secondary"><Settings size={15} aria-hidden="true" /> {t("actions.audioSettings")}</Button></Link><Link to="/contacts"><Button variant="secondary"><Users size={15} aria-hidden="true" /> {t("actions.browseContacts")}</Button></Link></div>
+        <div className="flex flex-wrap gap-2"><Link to="/settings/usage" className="text-sm underline underline-offset-4">{t("actions.usageDetails")}</Link><ButtonLink to="/settings/audio" variant="secondary"><Settings size={15} aria-hidden="true" /> {t("actions.audioSettings")}</ButtonLink><ButtonLink to="/contacts" variant="secondary"><Users size={15} aria-hidden="true" /> {t("actions.browseContacts")}</ButtonLink></div>
       </div>
       {usage.data?.available && usage.data.percentageUsed != null && <div className="mt-3 max-w-xl"><div className="h-1.5 rounded bg-neutral-100 dark:bg-neutral-900"><div className="h-1.5 rounded bg-neutral-900 dark:bg-neutral-100" style={{ width: `${Math.min(100, usage.data.percentageUsed)}%` }} /></div><p className="mt-2 text-xs text-neutral-500">{t("usage.used", { percentage: usage.data.percentageUsed.toFixed(1), remaining: formatBytes(usage.data.remainingBytes) })}</p></div>}
       {!usage.loading && !usage.error && usage.data && !usage.data.available && <p className="mt-2 text-xs text-neutral-500">{t("usage.configure")}</p>}

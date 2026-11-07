@@ -27,7 +27,7 @@
     "title": "Call a number",
     "detail": "Enter the exact SparkCall number, including letter case.",
     "aria": "SparkCall number",
-    "placeholder": "Enter a number",
+    "placeholder": "e.g. SC888 or +1 202 555 0123…",
     "submit": "Call"
   },
   "gettingStarted": {

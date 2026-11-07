@@ -211,14 +211,14 @@ export default function DialerPage() {
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <label className="text-xs text-neutral-500">
               <span className="mb-1.5 block font-medium">{t("audio.microphone")}</span>
-              <select aria-label={t("audio.microphone")} value={session.preferences.audioInputDeviceId} onChange={(event) => void changeInput(event.target.value)} className="focus-ring block w-full rounded-md border border-neutral-200 bg-transparent px-3 py-2 text-sm text-neutral-900 dark:border-neutral-800 dark:text-white">
+              <select name="audio-input-device" autoComplete="off" aria-label={t("audio.microphone")} value={session.preferences.audioInputDeviceId} onChange={(event) => void changeInput(event.target.value)} className="focus-ring block w-full rounded-md border border-neutral-200 bg-transparent px-3 py-2 text-sm text-neutral-900 dark:border-neutral-800 dark:text-white">
                 <option value="">{t("audio.systemDefault")}</option>
                 {devices.filter((device) => device.kind === "audioinput").map((device) => <option key={device.deviceId} value={device.deviceId}>{device.label || t("audio.microphoneOption")}</option>)}
               </select>
             </label>
             <label className="text-xs text-neutral-500">
               <span className="mb-1.5 block font-medium">{t("audio.speaker")}</span>
-              <select aria-label={t("audio.speaker")} value={session.preferences.audioOutputDeviceId} onChange={(event) => void changeOutput(event.target.value)} className="focus-ring block w-full rounded-md border border-neutral-200 bg-transparent px-3 py-2 text-sm text-neutral-900 dark:border-neutral-800 dark:text-white">
+              <select name="audio-output-device" autoComplete="off" aria-label={t("audio.speaker")} value={session.preferences.audioOutputDeviceId} onChange={(event) => void changeOutput(event.target.value)} className="focus-ring block w-full rounded-md border border-neutral-200 bg-transparent px-3 py-2 text-sm text-neutral-900 dark:border-neutral-800 dark:text-white">
                 <option value="">{t("audio.systemDefault")}</option>
                 {devices.filter((device) => device.kind === "audiooutput").map((device) => <option key={device.deviceId} value={device.deviceId}>{device.label || t("audio.speakerOption")}</option>)}
               </select>
@@ -237,7 +237,7 @@ export default function DialerPage() {
           </div>
           <span className={`mt-1 h-2 w-2 rounded-full ${session.online ? "bg-green-500" : "bg-amber-500"}`} aria-label={session.online ? t("status.online") : t("status.offline")} />
         </div>
-        <label className="mt-5 block text-xs font-medium text-neutral-600 dark:text-neutral-400"><span className="mb-1.5 block">{t("status.preferredMode")}</span><select aria-label={t("status.preferredMode")} value={session.preferences.connectionMode} disabled={!session.preferencesReady || modeSaving} onChange={(event) => void changeConnectionMode(event.target.value as UserPreferences["connectionMode"])} className="focus-ring block w-full rounded-md border border-neutral-200 bg-transparent px-3 py-2 text-sm text-neutral-900 disabled:opacity-50 dark:border-neutral-800 dark:text-white"><option value="auto">{t("status.connectionModes.auto")}</option><option value="p2p">{t("status.connectionModes.preferredP2p")}</option><option value="turn">{t("status.connectionModes.preferredTurn")}</option></select></label>
+        <label className="mt-5 block text-xs font-medium text-neutral-600 dark:text-neutral-400"><span className="mb-1.5 block">{t("status.preferredMode")}</span><select name="connection-mode" autoComplete="off" aria-label={t("status.preferredMode")} value={session.preferences.connectionMode} disabled={!session.preferencesReady || modeSaving} onChange={(event) => void changeConnectionMode(event.target.value as UserPreferences["connectionMode"])} className="focus-ring block w-full rounded-md border border-neutral-200 bg-transparent px-3 py-2 text-sm text-neutral-900 disabled:opacity-50 dark:border-neutral-800 dark:text-white"><option value="auto">{t("status.connectionModes.auto")}</option><option value="p2p">{t("status.connectionModes.preferredP2p")}</option><option value="turn">{t("status.connectionModes.preferredTurn")}</option></select></label>
         <p className="mt-2 text-xs leading-5 text-neutral-500">{t("status.modePreferenceDetail")}</p>
         <dl className="mt-6 divide-y divide-neutral-200 border-y border-neutral-200 text-sm dark:divide-neutral-800 dark:border-neutral-800">
           <div className="flex items-center justify-between gap-4 py-3"><dt className="text-neutral-500">{t("status.presence")}</dt><dd>{session.online ? t("status.online") : t("status.offline")}</dd></div>
